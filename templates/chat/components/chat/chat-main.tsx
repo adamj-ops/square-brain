@@ -1,73 +1,81 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ChatWelcomeScreen } from "./chat-welcome-screen";
 import { ChatConversationView } from "./chat-conversation-view";
-
-interface Message {
-  id: string;
-  content: string;
-  sender: "user" | "ai";
-  timestamp: Date;
-}
+import { useChatStore } from "@/store/chat-store";
 
 export function ChatMain() {
   const [message, setMessage] = useState("");
   const [selectedMode, setSelectedMode] = useState("fast");
   const [selectedModel, setSelectedModel] = useState("square-3");
-  const [isConversationStarted, setIsConversationStarted] = useState(false);
-  const [messages, setMessages] = useState<Message[]>([]);
 
-  const handleSend = () => {
+  const {
+    chats,
+    selectedChatId,
+    isGenerating,
+    createNewChat,
+    sendMessage,
+    stopGeneration,
+  } = useChatStore();
+
+  const currentChat = chats.find((c) => c.id === selectedChatId);
+  const messages = currentChat?.messages || [];
+  const isConversationStarted = messages.length > 0;
+
+  const handleSend = async () => {
     if (!message.trim()) return;
 
-    setIsConversationStarted(true);
+    let chatId = selectedChatId;
+    
+    // Create new chat if none selected
+    if (!chatId) {
+      chatId = createNewChat();
+    }
 
-    setMessages([
-      {
-        id: "1",
-        content: message,
-        sender: "user",
-        timestamp: new Date(),
-      },
-      {
-        id: "2",
-        content:
-          "Hello! I'm Square AI, your intelligent assistant. I'm here to help you with anything you need. How can I assist you today?",
-        sender: "ai",
-        timestamp: new Date(),
-      },
-    ]);
+    const content = message;
     setMessage("");
+    
+    await sendMessage(chatId, content);
   };
 
   const handleReset = () => {
-    setIsConversationStarted(false);
-    setMessages([]);
+    useChatStore.setState({ selectedChatId: null });
     setMessage("");
   };
 
-  const handleSendMessage = (content: string) => {
-    setMessages([
-      ...messages,
-      {
-        id: Date.now().toString(),
-        content,
-        sender: "user",
-        timestamp: new Date(),
-      },
-    ]);
+  const handleSendMessage = async (content: string) => {
+    if (!selectedChatId) return;
     setMessage("");
+    await sendMessage(selectedChatId, content);
   };
+
+  const handleActionClick = async (action: string) => {
+    if (!selectedChatId) return;
+    await sendMessage(selectedChatId, action);
+  };
+
+  // Map messages to the format expected by ChatConversationView
+  const mappedMessages = messages.map((m) => ({
+    id: m.id,
+    content: m.content,
+    sender: m.role === "user" ? "user" as const : "ai" as const,
+    timestamp: m.timestamp,
+    next_actions: m.next_actions,
+    isStreaming: m.isStreaming,
+  }));
 
   if (isConversationStarted) {
     return (
       <ChatConversationView
-        messages={messages}
+        messages={mappedMessages}
         message={message}
         onMessageChange={setMessage}
         onSend={handleSendMessage}
         onReset={handleReset}
+        onActionClick={handleActionClick}
+        isGenerating={isGenerating}
+        onStopGeneration={stopGeneration}
       />
     );
   }

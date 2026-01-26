@@ -1,6 +1,7 @@
+import { useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { XIcon, PaperclipIcon } from "lucide-react";
+import { XIcon, PaperclipIcon, Square } from "lucide-react";
 import { ChatMessage } from "./chat-message";
 
 interface Message {
@@ -8,6 +9,8 @@ interface Message {
   content: string;
   sender: "user" | "ai";
   timestamp: Date;
+  next_actions?: string[];
+  isStreaming?: boolean;
 }
 
 interface ChatConversationViewProps {
@@ -16,6 +19,9 @@ interface ChatConversationViewProps {
   onMessageChange: (value: string) => void;
   onSend: (content: string) => void;
   onReset: () => void;
+  onActionClick?: (action: string) => void;
+  isGenerating?: boolean;
+  onStopGeneration?: () => void;
 }
 
 export function ChatConversationView({
@@ -24,7 +30,17 @@ export function ChatConversationView({
   onMessageChange,
   onSend,
   onReset,
+  onActionClick,
+  isGenerating,
+  onStopGeneration,
 }: ChatConversationViewProps) {
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll to bottom when messages change
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
   return (
     <div className="flex h-full flex-col">
       <div className="flex-1 overflow-y-auto px-4 md:px-8 py-8">
@@ -40,8 +56,16 @@ export function ChatConversationView({
             </Button>
           </div>
           {messages.map((msg) => (
-            <ChatMessage key={msg.id} message={msg} />
+            <ChatMessage 
+              key={msg.id} 
+              message={{
+                ...msg,
+                role: msg.sender === "user" ? "user" : "assistant",
+              }} 
+              onActionClick={onActionClick}
+            />
           ))}
+          <div ref={messagesEndRef} />
         </div>
       </div>
 
@@ -53,9 +77,10 @@ export function ChatConversationView({
                 placeholder="Continue the conversation..."
                 value={message}
                 onChange={(e) => onMessageChange(e.target.value)}
-                className="min-h-[80px] resize-none border-0 bg-transparent px-4 py-3 text-base placeholder:text-muted-foreground/60 focus-visible:ring-0 focus-visible:ring-offset-0"
+                disabled={isGenerating}
+                className="min-h-[80px] resize-none border-0 bg-transparent px-4 py-3 text-base placeholder:text-muted-foreground/60 focus-visible:ring-0 focus-visible:ring-offset-0 disabled:opacity-50"
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
+                  if (e.key === "Enter" && !e.shiftKey && !isGenerating) {
                     e.preventDefault();
                     if (message.trim()) {
                       onSend(message);
@@ -75,17 +100,29 @@ export function ChatConversationView({
                   </Button>
                 </div>
 
-                <Button
-                  size="sm"
-                  onClick={() => {
-                    if (message.trim()) {
-                      onSend(message);
-                    }
-                  }}
-                  className="h-7 px-4"
-                >
-                  Send
-                </Button>
+                {isGenerating ? (
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    onClick={onStopGeneration}
+                    className="h-7 px-4 gap-2"
+                  >
+                    <Square className="size-3 fill-current" />
+                    Stop
+                  </Button>
+                ) : (
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      if (message.trim()) {
+                        onSend(message);
+                      }
+                    }}
+                    className="h-7 px-4"
+                  >
+                    Send
+                  </Button>
+                )}
               </div>
             </div>
           </div>
@@ -94,4 +131,3 @@ export function ChatConversationView({
     </div>
   );
 }
-
