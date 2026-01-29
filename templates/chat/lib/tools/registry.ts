@@ -20,6 +20,7 @@ import { themesLinkToInterviewTool } from "./implementations/themes-link-to-inte
 import { contentGenerateAssetsTool } from "./implementations/content-generate-assets";
 import { outreachComposeMessageTool } from "./implementations/outreach-compose-message";
 import { outreachSendEmailTool } from "./implementations/outreach-send-email";
+import { audienceScoreQuizTool } from "./implementations/audience-score-quiz";
 // Note: knowledgeIngestFirecrawlTool not registered here because it requires
 // Node.js runtime (crypto). Use the HTTP endpoint /api/internal/ingest/firecrawl instead.
 
@@ -62,6 +63,9 @@ registerTool(contentGenerateAssetsTool);
 // Pipeline 4: Outreach Automation tools
 registerTool(outreachComposeMessageTool);
 registerTool(outreachSendEmailTool);
+
+// Pipeline 5: Audience & Quiz Segmentation tools
+registerTool(audienceScoreQuizTool);
 
 // knowledgeIngestFirecrawlTool requires Node.js - use HTTP endpoint instead
 
