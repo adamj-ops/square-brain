@@ -84,10 +84,10 @@ Complete the standalone LifeRX Brain app and implement Pipelines 1–5 for produ
 
 ### Final Phase — Integration & Release
 
-33. [ ] F1: Create smoke test script (ingest → search → tool call → audit log)
-34. [ ] F2: Ensure all pipelines can be triggered via API/tools
-35. [ ] F3: Final README update (system overview, pipeline descriptions, how to test each)
-36. [ ] CHECKPOINT 8: Final report + release readiness
+33. [x] F1: Create smoke test script (ingest → search → tool call → audit log)
+34. [x] F2: Ensure all pipelines can be triggered via API/tools
+35. [x] F3: Final README update (system overview, pipeline descriptions, how to test each)
+36. [x] CHECKPOINT 8: Final report + release readiness
 
 ---
 
