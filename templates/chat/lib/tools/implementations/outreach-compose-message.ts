@@ -1,13 +1,15 @@
 /**
  * Tool: outreach.compose_message
  *
- * Composes an outreach message for a guest or prospect.
+ * Composes and stores an outreach message for approval.
+ * This is a write tool - requires allowWrites=true.
  * Messages require human approval before sending.
+ *
  * Pipeline 4: Outreach Automation (Human-in-the-Loop)
  */
 
-import type { ToolDefinition, ToolContext, ToolResponse } from "@/lib/tools/types";
 import { getServiceSupabase } from "@/lib/supabase/server";
+import type { ToolDefinition, ToolContext, ToolResponse } from "@/lib/tools/types";
 
 const DEFAULT_ORG_ID = process.env.DEFAULT_ORG_ID;
 
@@ -15,24 +17,31 @@ const DEFAULT_ORG_ID = process.env.DEFAULT_ORG_ID;
  * Input args for outreach.compose_message
  */
 export interface OutreachComposeMessageArgs {
-  /** Guest ID to send to */
-  guest_id: string;
-  /** Email subject line */
+  // Recipient (required)
+  recipient_email: string;
+  recipient_name: string;
+
+  // Message content (required)
   subject: string;
-  /** Plain text body */
   body_text: string;
-  /** HTML body (optional) */
   body_html?: string;
-  /** Message type */
-  message_type?: "email" | "linkedin" | "twitter_dm";
-  /** Outreach sequence ID (optional) */
+
+  // Channel
+  channel?: 'email' | 'linkedin' | 'twitter' | 'instagram' | 'sms' | 'other';
+
+  // Optional references
+  guest_id?: string;
   sequence_id?: string;
-  /** Step number in sequence */
   step_number?: number;
-  /** Schedule for future send */
-  scheduled_for?: string;
-  /** Immediately request approval */
-  request_approval?: boolean;
+
+  // Personalization variables used
+  variables?: Record<string, string>;
+
+  // Scheduling
+  scheduled_for?: string;  // ISO date string
+
+  // Whether to require approval (default true for safety)
+  requires_approval?: boolean;
 }
 
 /**
@@ -40,55 +49,89 @@ export interface OutreachComposeMessageArgs {
  */
 export interface OutreachComposeMessageResult {
   message_id: string;
-  guest_id: string;
-  guest_name: string;
-  recipient_email: string | null;
-  subject: string;
   status: string;
   requires_approval: boolean;
-  scheduled_for: string | null;
+  recipient_email: string;
+  subject: string;
 }
 
 /**
- * Validate input args
+ * Validate email format
+ */
+function isValidEmail(email: string): boolean {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email);
+}
+
+/**
+ * Validate input args - throws on invalid
  */
 function validateArgs(args: unknown): OutreachComposeMessageArgs {
-  if (!args || typeof args !== "object") {
-    throw new Error("args must be an object");
+  if (!args || typeof args !== 'object') {
+    throw new Error('Args must be an object');
   }
 
-  const raw = args as Record<string, unknown>;
+  const input = args as Record<string, unknown>;
 
-  if (!raw.guest_id || typeof raw.guest_id !== "string") {
-    throw new Error("guest_id is required and must be a string");
+  // Required: recipient_email
+  if (!input.recipient_email || typeof input.recipient_email !== 'string') {
+    throw new Error('recipient_email is required');
+  }
+  if (!isValidEmail(input.recipient_email)) {
+    throw new Error('recipient_email must be a valid email address');
   }
 
-  if (!raw.subject || typeof raw.subject !== "string") {
-    throw new Error("subject is required and must be a string");
+  // Required: recipient_name
+  if (!input.recipient_name || typeof input.recipient_name !== 'string') {
+    throw new Error('recipient_name is required');
   }
 
-  if (raw.subject.length > 200) {
-    throw new Error("subject must be at most 200 characters");
+  // Required: subject
+  if (!input.subject || typeof input.subject !== 'string') {
+    throw new Error('subject is required');
+  }
+  if (input.subject.length > 200) {
+    throw new Error('subject must be 200 characters or less');
   }
 
-  if (!raw.body_text || typeof raw.body_text !== "string") {
-    throw new Error("body_text is required and must be a string");
+  // Required: body_text
+  if (!input.body_text || typeof input.body_text !== 'string') {
+    throw new Error('body_text is required');
+  }
+  if (input.body_text.length > 10000) {
+    throw new Error('body_text must be 10000 characters or less');
   }
 
-  if (raw.body_text.length > 10000) {
-    throw new Error("body_text must be at most 10000 characters");
+  // Validate channel if provided
+  const validChannels = ['email', 'linkedin', 'twitter', 'instagram', 'sms', 'other'];
+  if (input.channel && !validChannels.includes(input.channel as string)) {
+    throw new Error(`channel must be one of: ${validChannels.join(', ')}`);
+  }
+
+  // Validate scheduled_for if provided
+  if (input.scheduled_for) {
+    const scheduledDate = new Date(input.scheduled_for as string);
+    if (isNaN(scheduledDate.getTime())) {
+      throw new Error('scheduled_for must be a valid ISO date string');
+    }
+    if (scheduledDate < new Date()) {
+      throw new Error('scheduled_for must be in the future');
+    }
   }
 
   return {
-    guest_id: raw.guest_id,
-    subject: raw.subject,
-    body_text: raw.body_text,
-    body_html: raw.body_html as string | undefined,
-    message_type: (raw.message_type as "email" | "linkedin" | "twitter_dm") || "email",
-    sequence_id: raw.sequence_id as string | undefined,
-    step_number: raw.step_number !== undefined ? Number(raw.step_number) : 1,
-    scheduled_for: raw.scheduled_for as string | undefined,
-    request_approval: raw.request_approval === true,
+    recipient_email: (input.recipient_email as string).trim().toLowerCase(),
+    recipient_name: (input.recipient_name as string).trim(),
+    subject: (input.subject as string).trim(),
+    body_text: (input.body_text as string).trim(),
+    body_html: input.body_html as string | undefined,
+    channel: (input.channel as OutreachComposeMessageArgs['channel']) || 'email',
+    guest_id: input.guest_id as string | undefined,
+    sequence_id: input.sequence_id as string | undefined,
+    step_number: input.step_number as number | undefined,
+    variables: input.variables as Record<string, string> | undefined,
+    scheduled_for: input.scheduled_for as string | undefined,
+    requires_approval: input.requires_approval !== false, // Default true
   };
 }
 
@@ -99,112 +142,104 @@ async function run(
   args: OutreachComposeMessageArgs,
   ctx: ToolContext
 ): Promise<ToolResponse<OutreachComposeMessageResult>> {
+  const supabase = getServiceSupabase();
   const orgId = ctx.org_id || DEFAULT_ORG_ID;
 
   if (!orgId) {
     throw new Error("org_id is required");
   }
 
-  const supabase = getServiceSupabase();
+  // Determine initial status
+  const status = args.requires_approval ? 'pending' : 'approved';
 
-  // Get guest details
-  const { data: guest } = await supabase
-    .from("guests")
-    .select("id, name, email")
-    .eq("id", args.guest_id)
-    .eq("org_id", orgId)
-    .single();
+  // If guest_id provided, verify it exists
+  if (args.guest_id) {
+    const { data: guest } = await supabase
+      .from('guests')
+      .select('id, name')
+      .eq('id', args.guest_id)
+      .eq('org_id', orgId)
+      .maybeSingle();
 
-  if (!guest) {
-    throw new Error(`Guest not found: ${args.guest_id}`);
+    if (!guest) {
+      throw new Error(`Guest not found: ${args.guest_id}`);
+    }
   }
 
-  // Verify sequence if provided
+  // If sequence_id provided, verify it exists
   if (args.sequence_id) {
     const { data: sequence } = await supabase
-      .from("outreach_sequences")
-      .select("id")
-      .eq("id", args.sequence_id)
-      .eq("org_id", orgId)
-      .single();
+      .from('outreach_sequences')
+      .select('id, name')
+      .eq('id', args.sequence_id)
+      .eq('org_id', orgId)
+      .maybeSingle();
 
     if (!sequence) {
-      throw new Error(`Sequence not found: ${args.sequence_id}`);
+      throw new Error(`Outreach sequence not found: ${args.sequence_id}`);
     }
   }
 
-  // Determine initial status
-  let status = "draft";
-  if (args.request_approval) {
-    status = "pending_approval";
-  }
-
-  // Parse scheduled_for if provided
-  let scheduledFor: string | null = null;
-  if (args.scheduled_for) {
-    const parsed = new Date(args.scheduled_for);
-    if (isNaN(parsed.getTime())) {
-      throw new Error("scheduled_for must be a valid date string");
-    }
-    scheduledFor = parsed.toISOString();
-  }
-
-  // Create the message
+  // Insert the message
   const { data: message, error } = await supabase
-    .from("outreach_messages")
+    .from('outreach_messages')
     .insert({
       org_id: orgId,
-      sequence_id: args.sequence_id,
-      guest_id: args.guest_id,
-      message_type: args.message_type || "email",
-      recipient_email: guest.email,
-      recipient_name: guest.name,
+      recipient_email: args.recipient_email,
+      recipient_name: args.recipient_name,
+      recipient_id: args.guest_id || null,
+      recipient_type: args.guest_id ? 'guest' : 'email',
       subject: args.subject,
       body_text: args.body_text,
-      body_html: args.body_html,
-      step_number: args.step_number || 1,
+      body_html: args.body_html || null,
+      channel: args.channel || 'email',
+      sequence_id: args.sequence_id || null,
+      step_number: args.step_number || null,
+      variables: args.variables || {},
       status,
-      scheduled_for: scheduledFor,
+      requires_approval: args.requires_approval,
+      scheduled_for: args.scheduled_for || null,
+      generated_by: 'ai',
     })
-    .select("id, status")
+    .select('id, status')
     .single();
 
-  if (error || !message) {
-    throw new Error(`Failed to create message: ${error?.message}`);
+  if (error) {
+    throw new Error(`Failed to create message: ${error.message}`);
   }
 
   // Log the creation event
-  await supabase.from("outreach_events").insert({
+  await supabase.from('outreach_events').insert({
     org_id: orgId,
     message_id: message.id,
-    sequence_id: args.sequence_id,
-    guest_id: args.guest_id,
-    event_type: "message_created",
+    sequence_id: args.sequence_id || null,
+    event_type: 'created',
     event_data: {
-      subject: args.subject,
-      message_type: args.message_type || "email",
-      request_approval: args.request_approval,
+      channel: args.channel || 'email',
+      has_html: !!args.body_html,
+      scheduled: !!args.scheduled_for,
     },
-    actor_type: "system",
+    source: 'ai',
   });
 
   return {
     data: {
       message_id: message.id,
-      guest_id: args.guest_id,
-      guest_name: guest.name,
-      recipient_email: guest.email,
-      subject: args.subject,
       status: message.status,
-      requires_approval: true, // All messages require approval
-      scheduled_for: scheduledFor,
+      requires_approval: args.requires_approval,
+      recipient_email: args.recipient_email,
+      subject: args.subject,
     },
     explainability: {
-      message_type: args.message_type || "email",
-      has_html: !!args.body_html,
+      reason: args.requires_approval
+        ? 'Message composed and awaiting human approval before sending'
+        : 'Message composed and approved (approval not required)',
+      org_id: orgId,
+      channel: args.channel || 'email',
+      has_guest_link: !!args.guest_id,
+      has_sequence_link: !!args.sequence_id,
+      scheduled: !!args.scheduled_for,
       body_length: args.body_text.length,
-      is_scheduled: !!scheduledFor,
-      approval_requested: args.request_approval || false,
     },
   };
 }
@@ -218,10 +253,9 @@ export const outreachComposeMessageTool: ToolDefinition<
 > = {
   name: "outreach.compose_message",
   description:
-    "Compose an outreach message for a guest or prospect. " +
-    "Messages are created as drafts and require human approval before sending. " +
-    "Set request_approval=true to immediately queue for approval. " +
-    "Use scheduled_for to schedule future sends (still requires approval).",
+    "Compose an outreach message (email, LinkedIn, etc.) for a recipient. " +
+    "By default, messages require human approval before sending (human-in-the-loop). " +
+    "Returns the message ID and status. Use outreach.send_email to actually send after approval.",
   writes: true,
   validateArgs,
   run,
