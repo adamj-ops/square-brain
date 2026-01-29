@@ -25,7 +25,7 @@ export const THEME_STATUSES = ["active", "merged", "archived"] as const;
 export type ThemeStatus = (typeof THEME_STATUSES)[number];
 
 /** Content types that can be linked to themes */
-export const CONTENT_TYPES = ["brain_item", "ai_doc", "ai_chunk"] as const;
+export const CONTENT_TYPES = ["brain_item", "ai_doc", "ai_chunk", "interview"] as const;
 export type ContentType = (typeof CONTENT_TYPES)[number];
 
 /**

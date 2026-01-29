@@ -17,6 +17,7 @@ import { scoringScoreGuestTool } from "./implementations/scoring-score-guest";
 import { interviewsAddQuoteTool } from "./implementations/interviews-add-quote";
 import { themesUpsertThemeTool } from "./implementations/themes-upsert-theme";
 import { themesLinkToInterviewTool } from "./implementations/themes-link-to-interview";
+import { contentGenerateAssetsTool } from "./implementations/content-generate-assets";
 // Note: knowledgeIngestFirecrawlTool not registered here because it requires
 // Node.js runtime (crypto). Use the HTTP endpoint /api/internal/ingest/firecrawl instead.
 
@@ -52,6 +53,9 @@ registerTool(scoringScoreGuestTool);
 registerTool(interviewsAddQuoteTool);
 registerTool(themesUpsertThemeTool);
 registerTool(themesLinkToInterviewTool);
+
+// Pipeline 3: Content Repurposing tools
+registerTool(contentGenerateAssetsTool);
 
 // knowledgeIngestFirecrawlTool requires Node.js - use HTTP endpoint instead
 

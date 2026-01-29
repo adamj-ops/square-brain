@@ -64,9 +64,9 @@ Complete the standalone LifeRX Brain app and implement Pipelines 1–5 for produ
 
 ### Pipeline 3 — Content Repurposing
 
-22. [ ] P3.1: Create content_assets table (migration)
-23. [ ] P3.2: Implement content.generate_assets tool (quote cards, carousel outlines, shortform scripts, audio bite ideas)
-24. [ ] CHECKPOINT 5: Generate content ideas from one interview
+22. [x] P3.1: Create content_assets table (migration)
+23. [x] P3.2: Implement content.generate_assets tool (quote cards, carousel outlines, shortform scripts, audio bite ideas)
+24. [x] CHECKPOINT 5: Generate content ideas from one interview
 
 ### Pipeline 4 — Outreach Automation (Human-in-the-Loop)
 

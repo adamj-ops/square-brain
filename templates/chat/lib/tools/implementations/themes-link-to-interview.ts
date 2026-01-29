@@ -1,27 +1,51 @@
 /**
  * Tool: themes.link_to_interview
  *
- * Links a theme to an interview, indicating the interview covers that theme.
+ * Links a theme to an interview with relevance scoring and depth analysis.
+ * This is a write tool - requires allowWrites=true.
+ *
  * Pipeline 2: Interview Intelligence
  */
 
-import type { ToolDefinition, ToolContext, ToolResponse } from "@/lib/tools/types";
 import { getServiceSupabase } from "@/lib/supabase/server";
+import type { ToolDefinition, ToolContext, ToolResponse } from "@/lib/tools/types";
 
 const DEFAULT_ORG_ID = process.env.DEFAULT_ORG_ID;
+
+/**
+ * Valid discussion depths
+ */
+const DISCUSSION_DEPTHS = [
+  "mentioned",      // Briefly mentioned
+  "discussed",      // Substantively discussed
+  "deep_dive",      // Major focus of interview
+  "expert_insight", // Guest provided expert-level insight
+] as const;
+type DiscussionDepth = (typeof DISCUSSION_DEPTHS)[number];
 
 /**
  * Input args for themes.link_to_interview
  */
 export interface ThemesLinkToInterviewArgs {
-  /** Theme ID to link */
-  theme_id: string;
-  /** Interview ID to link to */
+  // Required
   interview_id: string;
-  /** Relevance score (0-1) */
-  relevance_score?: number;
-  /** Is this a primary theme of the interview? */
-  is_primary?: boolean;
+  theme_id: string;
+
+  // Analysis
+  relevance_score?: number; // 0-1, how central to this interview
+  discussion_depth?: DiscussionDepth;
+
+  // Evidence
+  excerpt?: string; // Key excerpt about this theme
+  supporting_quote_ids?: string[]; // References to interview_quotes.id
+
+  // Time tracking
+  first_mentioned_at?: number; // Timestamp in seconds
+  total_duration_seconds?: number; // Total time spent on theme
+
+  // Metadata
+  detected_by?: "scanner" | "manual" | "agent";
+  detection_metadata?: Record<string, unknown>;
 }
 
 /**
@@ -29,159 +53,253 @@ export interface ThemesLinkToInterviewArgs {
  */
 export interface ThemesLinkToInterviewResult {
   link_id: string;
-  theme_id: string;
   interview_id: string;
+  theme_id: string;
   theme_name: string;
-  interview_title: string;
-  is_primary: boolean;
+  is_new_link: boolean;
   relevance_score: number;
-  status: "created" | "updated";
+  discussion_depth: string;
 }
 
 /**
- * Validate input args
+ * Validate input args - throws on invalid
  */
 function validateArgs(args: unknown): ThemesLinkToInterviewArgs {
   if (!args || typeof args !== "object") {
-    throw new Error("args must be an object");
+    throw new Error("Args must be an object");
   }
 
-  const raw = args as Record<string, unknown>;
+  const input = args as Record<string, unknown>;
 
-  if (!raw.theme_id || typeof raw.theme_id !== "string") {
-    throw new Error("theme_id is required and must be a string");
+  // Required: interview_id
+  if (!input.interview_id || typeof input.interview_id !== "string") {
+    throw new Error("interview_id is required and must be a string (UUID)");
   }
 
-  if (!raw.interview_id || typeof raw.interview_id !== "string") {
-    throw new Error("interview_id is required and must be a string");
+  // Required: theme_id
+  if (!input.theme_id || typeof input.theme_id !== "string") {
+    throw new Error("theme_id is required and must be a string (UUID)");
+  }
+
+  // Validate discussion_depth if provided
+  if (input.discussion_depth && !DISCUSSION_DEPTHS.includes(input.discussion_depth as DiscussionDepth)) {
+    throw new Error(`discussion_depth must be one of: ${DISCUSSION_DEPTHS.join(", ")}`);
+  }
+
+  // Validate relevance_score range
+  if (input.relevance_score !== undefined) {
+    const score = Number(input.relevance_score);
+    if (isNaN(score) || score < 0 || score > 1) {
+      throw new Error("relevance_score must be a number between 0 and 1");
+    }
+  }
+
+  // Validate timestamps
+  if (input.first_mentioned_at !== undefined && (typeof input.first_mentioned_at !== "number" || input.first_mentioned_at < 0)) {
+    throw new Error("first_mentioned_at must be a non-negative number (seconds)");
+  }
+
+  if (input.total_duration_seconds !== undefined && (typeof input.total_duration_seconds !== "number" || input.total_duration_seconds < 0)) {
+    throw new Error("total_duration_seconds must be a non-negative number");
+  }
+
+  // Validate supporting_quote_ids if provided
+  if (input.supporting_quote_ids && (!Array.isArray(input.supporting_quote_ids) || !input.supporting_quote_ids.every((id) => typeof id === "string"))) {
+    throw new Error("supporting_quote_ids must be an array of strings (UUIDs)");
   }
 
   return {
-    theme_id: raw.theme_id,
-    interview_id: raw.interview_id,
-    relevance_score: raw.relevance_score !== undefined ? Number(raw.relevance_score) : 0.5,
-    is_primary: raw.is_primary === true,
+    interview_id: input.interview_id as string,
+    theme_id: input.theme_id as string,
+    relevance_score: input.relevance_score !== undefined ? Number(input.relevance_score) : undefined,
+    discussion_depth: (input.discussion_depth as DiscussionDepth) || "discussed",
+    excerpt: input.excerpt ? (input.excerpt as string).trim() : undefined,
+    supporting_quote_ids: input.supporting_quote_ids as string[] | undefined,
+    first_mentioned_at: input.first_mentioned_at as number | undefined,
+    total_duration_seconds: input.total_duration_seconds as number | undefined,
+    detected_by: (input.detected_by as "scanner" | "manual" | "agent") || "manual",
+    detection_metadata: input.detection_metadata as Record<string, unknown> | undefined,
   };
 }
 
 /**
- * Execute the link creation
+ * Execute the link operation
  */
 async function run(
   args: ThemesLinkToInterviewArgs,
   ctx: ToolContext
 ): Promise<ToolResponse<ThemesLinkToInterviewResult>> {
+  const supabase = getServiceSupabase();
   const orgId = ctx.org_id || DEFAULT_ORG_ID;
 
   if (!orgId) {
     throw new Error("org_id is required");
   }
 
-  const supabase = getServiceSupabase();
-
-  // Verify theme exists
-  const { data: theme } = await supabase
-    .from("themes")
-    .select("id, name")
-    .eq("id", args.theme_id)
-    .eq("org_id", orgId)
-    .single();
-
-  if (!theme) {
-    throw new Error(`Theme not found: ${args.theme_id}`);
-  }
-
-  // Verify interview exists
-  const { data: interview } = await supabase
+  // Verify interview exists and belongs to org
+  const { data: interview, error: interviewError } = await supabase
     .from("interviews")
-    .select("id, title")
+    .select("id, title, org_id")
     .eq("id", args.interview_id)
-    .eq("org_id", orgId)
     .single();
 
-  if (!interview) {
+  if (interviewError || !interview) {
     throw new Error(`Interview not found: ${args.interview_id}`);
   }
 
-  // Check if link exists
-  const { data: existing } = await supabase
+  if (interview.org_id !== orgId) {
+    throw new Error("Interview belongs to a different organization");
+  }
+
+  // Verify theme exists and belongs to org
+  const { data: theme, error: themeError } = await supabase
+    .from("themes")
+    .select("id, name, org_id, status")
+    .eq("id", args.theme_id)
+    .single();
+
+  if (themeError || !theme) {
+    throw new Error(`Theme not found: ${args.theme_id}`);
+  }
+
+  if (theme.org_id !== orgId) {
+    throw new Error("Theme belongs to a different organization");
+  }
+
+  if (theme.status !== "active") {
+    throw new Error(`Theme is not active (status: ${theme.status})`);
+  }
+
+  // Check for existing link
+  const { data: existingLink, error: selectError } = await supabase
     .from("interview_themes")
     .select("id")
     .eq("interview_id", args.interview_id)
     .eq("theme_id", args.theme_id)
-    .single();
+    .maybeSingle();
 
-  const relevanceScore = Math.max(0, Math.min(1, args.relevance_score || 0.5));
+  if (selectError) {
+    throw new Error(`Failed to check existing link: ${selectError.message}`);
+  }
+
+  const relevanceScore = args.relevance_score ?? 0.5;
+  const discussionDepth = args.discussion_depth || "discussed";
   let linkId: string;
-  let isNew = false;
+  let isNewLink = false;
 
-  if (existing) {
+  if (existingLink) {
     // Update existing link
-    const { error: updateError } = await supabase
-      .from("interview_themes")
-      .update({
-        relevance_score: relevanceScore,
-        is_primary: args.is_primary || false,
-      })
-      .eq("id", existing.id);
+    linkId = existingLink.id;
 
-    if (updateError) {
-      throw new Error(`Failed to update link: ${updateError.message}`);
+    const updateData: Record<string, unknown> = {};
+
+    // Only update if new value is higher (progressive enhancement)
+    if (args.relevance_score !== undefined) {
+      updateData.relevance_score = relevanceScore;
+    }
+    if (args.discussion_depth) {
+      updateData.discussion_depth = discussionDepth;
+    }
+    if (args.excerpt !== undefined) {
+      updateData.excerpt = args.excerpt;
+    }
+    if (args.supporting_quote_ids !== undefined) {
+      updateData.supporting_quotes = args.supporting_quote_ids;
+    }
+    if (args.first_mentioned_at !== undefined) {
+      updateData.first_mentioned_at = args.first_mentioned_at;
+    }
+    if (args.total_duration_seconds !== undefined) {
+      updateData.total_duration_seconds = args.total_duration_seconds;
+    }
+    if (args.detection_metadata !== undefined) {
+      updateData.detection_metadata = args.detection_metadata;
     }
 
-    linkId = existing.id;
+    if (Object.keys(updateData).length > 0) {
+      const { error: updateError } = await supabase
+        .from("interview_themes")
+        .update(updateData)
+        .eq("id", linkId);
+
+      if (updateError) {
+        throw new Error(`Failed to update link: ${updateError.message}`);
+      }
+    }
   } else {
     // Create new link
+    isNewLink = true;
+
     const { data: newLink, error: insertError } = await supabase
       .from("interview_themes")
       .insert({
+        org_id: orgId,
         interview_id: args.interview_id,
         theme_id: args.theme_id,
-        org_id: orgId,
         relevance_score: relevanceScore,
-        is_primary: args.is_primary || false,
-        detected_by: "ai",
+        discussion_depth: discussionDepth,
+        excerpt: args.excerpt || null,
+        supporting_quotes: args.supporting_quote_ids || [],
+        first_mentioned_at: args.first_mentioned_at ?? null,
+        total_duration_seconds: args.total_duration_seconds ?? null,
+        detected_by: args.detected_by,
+        detection_metadata: args.detection_metadata || {},
       })
       .select("id")
       .single();
 
-    if (insertError || !newLink) {
-      throw new Error(`Failed to create link: ${insertError?.message}`);
+    if (insertError) {
+      // Handle race condition
+      if (insertError.code === "23505") {
+        const { data: raced } = await supabase
+          .from("interview_themes")
+          .select("id")
+          .eq("interview_id", args.interview_id)
+          .eq("theme_id", args.theme_id)
+          .single();
+
+        if (raced) {
+          return {
+            data: {
+              link_id: raced.id,
+              interview_id: args.interview_id,
+              theme_id: args.theme_id,
+              theme_name: theme.name,
+              is_new_link: false,
+              relevance_score: relevanceScore,
+              discussion_depth: discussionDepth,
+            },
+            explainability: {
+              reason: "Link created by another process (race condition handled)",
+              interview_title: interview.title,
+              theme_name: theme.name,
+            },
+          };
+        }
+      }
+      throw new Error(`Failed to create link: ${insertError.message}`);
     }
 
     linkId = newLink.id;
-    isNew = true;
-
-    // Update theme evidence count (ignore if RPC doesn't exist)
-    try {
-      await supabase.rpc("link_content_to_theme", {
-        p_org_id: orgId,
-        p_theme_id: args.theme_id,
-        p_content_type: "interview",
-        p_content_id: args.interview_id,
-        p_relevance_score: relevanceScore,
-        p_detected_by: "ai",
-      });
-    } catch {
-      // Ignore if RPC doesn't exist (just for content_themes table)
-    }
   }
 
   return {
     data: {
       link_id: linkId,
-      theme_id: args.theme_id,
       interview_id: args.interview_id,
+      theme_id: args.theme_id,
       theme_name: theme.name,
-      interview_title: interview.title,
-      is_primary: args.is_primary || false,
+      is_new_link: isNewLink,
       relevance_score: relevanceScore,
-      status: isNew ? "created" : "updated",
+      discussion_depth: discussionDepth,
     },
     explainability: {
-      operation: isNew ? "created_new_link" : "updated_existing_link",
-      theme_name: theme.name,
+      reason: isNewLink ? "Created new interview-theme link" : "Updated existing link",
       interview_title: interview.title,
+      theme_name: theme.name,
+      discussion_depth: discussionDepth,
+      has_excerpt: !!args.excerpt,
+      has_supporting_quotes: (args.supporting_quote_ids?.length || 0) > 0,
     },
   };
 }
@@ -195,9 +313,9 @@ export const themesLinkToInterviewTool: ToolDefinition<
 > = {
   name: "themes.link_to_interview",
   description:
-    "Link a theme to an interview to indicate the interview discusses that theme. " +
-    "Use is_primary=true for the main themes of an interview. " +
-    "Relevance score indicates how central the theme is to the interview content.",
+    "Links a theme to an interview with relevance scoring and discussion depth analysis. " +
+    "Use this to track which themes were covered in each interview, how deeply they were discussed, " +
+    "and link supporting quotes as evidence.",
   writes: true,
   validateArgs,
   run,

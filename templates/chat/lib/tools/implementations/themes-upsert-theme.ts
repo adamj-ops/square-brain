@@ -1,14 +1,64 @@
 /**
  * Tool: themes.upsert_theme
  *
- * Creates or updates a theme for categorizing content.
+ * Creates or updates a theme in the knowledge system.
+ * This is a write tool - requires allowWrites=true.
+ *
  * Pipeline 2: Interview Intelligence
  */
 
-import type { ToolDefinition, ToolContext, ToolResponse } from "@/lib/tools/types";
 import { getServiceSupabase } from "@/lib/supabase/server";
+import type { ToolDefinition, ToolContext, ToolResponse } from "@/lib/tools/types";
 
 const DEFAULT_ORG_ID = process.env.DEFAULT_ORG_ID;
+
+/**
+ * Valid theme categories
+ */
+const THEME_CATEGORIES = [
+  "product",
+  "culture",
+  "process",
+  "strategy",
+  "technical",
+  "customer",
+  "growth",
+  "operations",
+  "other",
+] as const;
+type ThemeCategory = (typeof THEME_CATEGORIES)[number];
+
+/**
+ * Input args for themes.upsert_theme
+ */
+export interface ThemesUpsertThemeArgs {
+  // Required
+  name: string;
+
+  // Optional identification
+  slug?: string; // Auto-generated from name if not provided
+
+  // Content
+  description?: string;
+  category?: ThemeCategory;
+
+  // Metrics (optional override)
+  confidence_score?: number; // 0-1
+
+  // Metadata
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Output from themes.upsert_theme
+ */
+export interface ThemesUpsertThemeResult {
+  theme_id: string;
+  slug: string;
+  is_new: boolean;
+  mention_count: number;
+  evidence_count: number;
+}
 
 /**
  * Generate URL-safe slug from name
@@ -17,158 +67,179 @@ function generateSlug(name: string): string {
   return name
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "");
+    .replace(/(^-|-$)/g, "")
+    .slice(0, 50);
 }
 
 /**
- * Input args for themes.upsert_theme
- */
-export interface ThemesUpsertThemeArgs {
-  /** Theme name */
-  name: string;
-  /** Optional custom slug (auto-generated if not provided) */
-  slug?: string;
-  /** Theme description */
-  description?: string;
-  /** Category (e.g., "product", "culture", "process", "strategy") */
-  category?: string;
-  /** Confidence score (0-1) */
-  confidence_score?: number;
-}
-
-/**
- * Output from themes.upsert_theme
- */
-export interface ThemesUpsertThemeResult {
-  theme_id: string;
-  name: string;
-  slug: string;
-  status: "created" | "updated";
-  mention_count: number;
-  evidence_count: number;
-}
-
-/**
- * Validate input args
+ * Validate input args - throws on invalid
  */
 function validateArgs(args: unknown): ThemesUpsertThemeArgs {
   if (!args || typeof args !== "object") {
-    throw new Error("args must be an object");
+    throw new Error("Args must be an object");
   }
 
-  const raw = args as Record<string, unknown>;
+  const input = args as Record<string, unknown>;
 
-  if (!raw.name || typeof raw.name !== "string") {
-    throw new Error("name is required and must be a string");
+  // Required: name
+  if (!input.name || typeof input.name !== "string" || input.name.trim().length === 0) {
+    throw new Error("name is required and must be a non-empty string");
   }
 
-  if (raw.name.length < 2) {
-    throw new Error("name must be at least 2 characters");
+  // Validate category if provided
+  if (input.category && !THEME_CATEGORIES.includes(input.category as ThemeCategory)) {
+    throw new Error(`category must be one of: ${THEME_CATEGORIES.join(", ")}`);
+  }
+
+  // Validate confidence_score range
+  if (input.confidence_score !== undefined) {
+    const score = Number(input.confidence_score);
+    if (isNaN(score) || score < 0 || score > 1) {
+      throw new Error("confidence_score must be a number between 0 and 1");
+    }
   }
 
   return {
-    name: raw.name,
-    slug: raw.slug as string | undefined,
-    description: raw.description as string | undefined,
-    category: raw.category as string | undefined,
-    confidence_score: raw.confidence_score !== undefined ? Number(raw.confidence_score) : undefined,
+    name: (input.name as string).trim(),
+    slug: input.slug ? (input.slug as string).trim() : undefined,
+    description: input.description ? (input.description as string).trim() : undefined,
+    category: input.category as ThemeCategory | undefined,
+    confidence_score: input.confidence_score !== undefined ? Number(input.confidence_score) : undefined,
+    metadata: input.metadata as Record<string, unknown> | undefined,
   };
 }
 
 /**
- * Execute the theme upsert
+ * Execute the upsert operation
  */
 async function run(
   args: ThemesUpsertThemeArgs,
   ctx: ToolContext
 ): Promise<ToolResponse<ThemesUpsertThemeResult>> {
+  const supabase = getServiceSupabase();
   const orgId = ctx.org_id || DEFAULT_ORG_ID;
 
   if (!orgId) {
     throw new Error("org_id is required");
   }
 
-  const supabase = getServiceSupabase();
   const slug = args.slug || generateSlug(args.name);
-
-  // Try to find existing theme
-  const { data: existing } = await supabase
-    .from("themes")
-    .select("id, mention_count, evidence_count")
-    .eq("org_id", orgId)
-    .eq("slug", slug)
-    .single();
-
   let themeId: string;
   let isNew = false;
   let mentionCount = 0;
   let evidenceCount = 0;
 
+  // Check for existing theme
+  const { data: existing, error: selectError } = await supabase
+    .from("themes")
+    .select("id, mention_count, evidence_count")
+    .eq("org_id", orgId)
+    .eq("slug", slug)
+    .eq("status", "active")
+    .maybeSingle();
+
+  if (selectError) {
+    throw new Error(`Failed to check existing theme: ${selectError.message}`);
+  }
+
   if (existing) {
     // Update existing theme
+    themeId = existing.id;
+    mentionCount = existing.mention_count + 1;
+    evidenceCount = existing.evidence_count;
+
+    const updateData: Record<string, unknown> = {
+      name: args.name,
+      last_seen_at: new Date().toISOString(),
+      mention_count: mentionCount,
+    };
+
+    // Only update fields that are provided
+    if (args.description !== undefined) updateData.description = args.description;
+    if (args.category !== undefined) updateData.category = args.category;
+    if (args.confidence_score !== undefined) updateData.confidence_score = args.confidence_score;
+    if (args.metadata !== undefined) {
+      // Merge metadata
+      updateData.metadata = args.metadata;
+    }
+
     const { error: updateError } = await supabase
       .from("themes")
-      .update({
-        name: args.name,
-        description: args.description || undefined,
-        category: args.category || undefined,
-        confidence_score: args.confidence_score !== undefined 
-          ? Math.max(0, Math.min(1, args.confidence_score)) 
-          : undefined,
-        mention_count: existing.mention_count + 1,
-        last_seen_at: new Date().toISOString(),
-      })
-      .eq("id", existing.id);
+      .update(updateData)
+      .eq("id", themeId);
 
     if (updateError) {
       throw new Error(`Failed to update theme: ${updateError.message}`);
     }
-
-    themeId = existing.id;
-    mentionCount = existing.mention_count + 1;
-    evidenceCount = existing.evidence_count;
   } else {
-    // Create new theme
+    // Insert new theme
+    isNew = true;
+    mentionCount = 1;
+
     const { data: newTheme, error: insertError } = await supabase
       .from("themes")
       .insert({
         org_id: orgId,
         name: args.name,
         slug,
-        description: args.description,
-        category: args.category,
-        confidence_score: args.confidence_score !== undefined 
-          ? Math.max(0, Math.min(1, args.confidence_score)) 
-          : 0.5,
+        description: args.description || null,
+        category: args.category || "other",
+        confidence_score: args.confidence_score ?? 0.5,
         mention_count: 1,
         evidence_count: 0,
         status: "active",
+        metadata: args.metadata || {},
       })
       .select("id")
       .single();
 
-    if (insertError || !newTheme) {
-      throw new Error(`Failed to create theme: ${insertError?.message}`);
+    if (insertError) {
+      // Handle race condition (duplicate slug)
+      if (insertError.code === "23505") {
+        const { data: raced } = await supabase
+          .from("themes")
+          .select("id, mention_count, evidence_count")
+          .eq("org_id", orgId)
+          .eq("slug", slug)
+          .single();
+
+        if (raced) {
+          return {
+            data: {
+              theme_id: raced.id,
+              slug,
+              is_new: false,
+              mention_count: raced.mention_count,
+              evidence_count: raced.evidence_count,
+            },
+            explainability: {
+              reason: "Theme created by another process (race condition handled)",
+              slug,
+              org_id: orgId,
+            },
+          };
+        }
+      }
+      throw new Error(`Failed to create theme: ${insertError.message}`);
     }
 
     themeId = newTheme.id;
-    isNew = true;
-    mentionCount = 1;
   }
 
   return {
     data: {
       theme_id: themeId,
-      name: args.name,
       slug,
-      status: isNew ? "created" : "updated",
+      is_new: isNew,
       mention_count: mentionCount,
       evidence_count: evidenceCount,
     },
     explainability: {
-      operation: isNew ? "created_new_theme" : "updated_existing_theme",
-      category: args.category || "uncategorized",
-      has_description: !!args.description,
+      reason: isNew ? "Created new theme" : "Updated existing theme",
+      slug,
+      org_id: orgId,
+      category: args.category || "other",
+      description_provided: !!args.description,
     },
   };
 }
@@ -182,9 +253,9 @@ export const themesUpsertThemeTool: ToolDefinition<
 > = {
   name: "themes.upsert_theme",
   description:
-    "Create or update a theme for categorizing content across interviews. " +
-    "Themes help identify recurring topics, expertise areas, and patterns. " +
-    "Categories can be: product, culture, process, strategy, or custom.",
+    "Creates or updates a theme in the knowledge system. " +
+    "Themes represent recurring patterns, topics, or areas of expertise extracted from content. " +
+    "If a theme with the same slug exists, it will be updated; otherwise a new theme is created.",
   writes: true,
   validateArgs,
   run,
