@@ -80,7 +80,12 @@ async function createConversationInDB(title: string): Promise<string | null> {
  */
 async function saveMessageToDB(
   conversationId: string,
-  message: { role: "user" | "assistant"; content: string; next_actions?: string[] }
+  message: {
+    role: "user" | "assistant";
+    content: string;
+    next_actions?: string[];
+    assumptions?: string[];
+  }
 ): Promise<void> {
   try {
     await fetch(`/api/conversations/${conversationId}/messages`, {
@@ -109,6 +114,7 @@ async function fetchMessagesFromDB(
         role: "user" | "assistant";
         content: string;
         next_actions: string[] | null;
+        assumptions: string[] | null;
         created_at: string;
       }) => ({
         id: m.id,
@@ -116,6 +122,7 @@ async function fetchMessagesFromDB(
         content: m.content,
         timestamp: new Date(m.created_at),
         next_actions: m.next_actions ?? undefined,
+        assumptions: m.assumptions ?? undefined,
       })
     );
   } catch {
@@ -136,8 +143,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const chat = get().chats.find((c) => c.id === chatId);
     if (chat?.dbId && chat.messages.length === 0) {
       await get().loadMessages(chatId);
-      // Guard: if user switched away during load, don't update state further
-      if (get().selectedChatId !== chatId) return;
     }
   },
 
@@ -310,6 +315,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     let streamedContent = "";
     let finalContent = "";
     let finalNextActions: string[] | undefined;
+    let finalAssumptions: string[] | undefined;
 
     try {
       await runAssistant(
@@ -324,6 +330,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
             // Read ALL data from final.payload (canonical contract)
             finalContent = event.payload.content;
             finalNextActions = event.payload.next_actions;
+            finalAssumptions = event.payload.assumptions;
             updateMessage(chatId, assistantMessageId, {
               content: event.payload.content,
               next_actions: event.payload.next_actions,
@@ -342,6 +349,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           role: "assistant",
           content: finalContent,
           next_actions: finalNextActions,
+          assumptions: finalAssumptions,
         });
       }
     } catch (err) {

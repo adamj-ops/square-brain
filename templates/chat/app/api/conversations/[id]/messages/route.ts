@@ -27,13 +27,18 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
 /**
  * POST /api/conversations/[id]/messages
  * Add a message to a conversation
- * Body: { role: "user" | "assistant", content: string, next_actions?: string[] }
+ * Body: { role: "user" | "assistant", content: string, next_actions?: string[], assumptions?: string[] }
  */
 export async function POST(req: NextRequest, { params }: RouteParams) {
   const { id } = await params;
   const supabase = createServerClient();
 
-  let body: { role: "user" | "assistant"; content: string; next_actions?: string[] };
+  let body: {
+    role: "user" | "assistant";
+    content: string;
+    next_actions?: string[];
+    assumptions?: string[];
+  };
   try {
     body = await req.json();
   } catch {
@@ -51,6 +56,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       role: body.role,
       content: body.content,
       next_actions: body.next_actions ?? null,
+      assumptions: body.assumptions ?? null,
     })
     .select()
     .single();
