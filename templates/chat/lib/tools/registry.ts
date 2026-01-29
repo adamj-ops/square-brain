@@ -14,6 +14,9 @@ import { brainSemanticSearchTool } from "./implementations/brain-semantic-search
 import { guestsUpsertProfileTool } from "./implementations/guests-upsert-profile";
 import { guestsExtractSignalsTool } from "./implementations/guests-extract-signals";
 import { scoringScoreGuestTool } from "./implementations/scoring-score-guest";
+import { interviewsAddQuoteTool } from "./implementations/interviews-add-quote";
+import { themesUpsertThemeTool } from "./implementations/themes-upsert-theme";
+import { themesLinkToInterviewTool } from "./implementations/themes-link-to-interview";
 // Note: knowledgeIngestFirecrawlTool not registered here because it requires
 // Node.js runtime (crypto). Use the HTTP endpoint /api/internal/ingest/firecrawl instead.
 
@@ -44,6 +47,11 @@ registerTool(brainSemanticSearchTool);
 registerTool(guestsUpsertProfileTool);
 registerTool(guestsExtractSignalsTool);
 registerTool(scoringScoreGuestTool);
+
+// Pipeline 2: Interview Intelligence tools
+registerTool(interviewsAddQuoteTool);
+registerTool(themesUpsertThemeTool);
+registerTool(themesLinkToInterviewTool);
 
 // knowledgeIngestFirecrawlTool requires Node.js - use HTTP endpoint instead
 
