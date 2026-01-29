@@ -167,36 +167,31 @@ CREATE TABLE IF NOT EXISTS guest_scores (
   guest_id UUID NOT NULL REFERENCES guests(id) ON DELETE CASCADE,
   org_id TEXT NOT NULL,  -- Denormalized for faster queries
   
-  -- Score identity
-  score_type TEXT NOT NULL DEFAULT 'overall' CHECK (score_type IN (
-    'overall',           -- Overall fit score
-    'expertise',         -- Expertise relevance score
-    'reach',             -- Audience reach score
-    'timeliness',        -- How timely/relevant now
-    'accessibility',     -- Likelihood to respond/accept
-    'custom'             -- Custom scoring dimension
-  )),
+  -- Overall score
+  total_score NUMERIC(5,2) NOT NULL,  -- Weighted total (0-100)
   
-  -- Score value
-  score NUMERIC(5,2) NOT NULL,  -- The actual score (0-100)
+  -- Component scores (0-100 each)
+  expertise_score NUMERIC(5,2) DEFAULT 0,
+  reach_score NUMERIC(5,2) DEFAULT 0,
+  relevance_score NUMERIC(5,2) DEFAULT 0,
+  availability_score NUMERIC(5,2) DEFAULT 50,  -- Default neutral
+  content_potential_score NUMERIC(5,2) DEFAULT 0,
   
   -- Explainability
-  factors JSONB NOT NULL DEFAULT '[]',  -- Array of { factor, weight, value, contribution }
-  reasoning TEXT,                        -- Human-readable explanation
+  explanation TEXT,             -- Human-readable explanation
+  top_factors TEXT[] DEFAULT '{}',  -- Top positive factors
+  concerns TEXT[] DEFAULT '{}',     -- Red flags/concerns
   
   -- Versioning
-  rules_version TEXT NOT NULL,  -- Version of scoring rules used
-  model_version TEXT,           -- LLM model if used
+  scoring_version TEXT NOT NULL,  -- Version of scoring rules used
+  scoring_rules JSONB DEFAULT '{}',  -- Weights used for this score
   
   -- Validity
   computed_at TIMESTAMPTZ DEFAULT NOW(),
   valid_until TIMESTAMPTZ,  -- When this score should be recomputed
   
-  -- Metadata
-  metadata JSONB DEFAULT '{}',
-  
-  -- One score per type per guest (latest wins)
-  CONSTRAINT guest_scores_unique UNIQUE (guest_id, score_type)
+  -- One score per guest per version
+  CONSTRAINT guest_scores_unique UNIQUE (guest_id, scoring_version)
 );
 
 -- ============================================================================
@@ -226,7 +221,7 @@ CREATE INDEX IF NOT EXISTS idx_guest_signals_strength ON guest_signals(strength 
 -- Guest scores indexes
 CREATE INDEX IF NOT EXISTS idx_guest_scores_guest_id ON guest_scores(guest_id);
 CREATE INDEX IF NOT EXISTS idx_guest_scores_org_id ON guest_scores(org_id);
-CREATE INDEX IF NOT EXISTS idx_guest_scores_type_score ON guest_scores(score_type, score DESC);
+CREATE INDEX IF NOT EXISTS idx_guest_scores_total ON guest_scores(total_score DESC);
 CREATE INDEX IF NOT EXISTS idx_guest_scores_computed ON guest_scores(computed_at DESC);
 
 -- ============================================================================

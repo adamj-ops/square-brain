@@ -5,8 +5,8 @@
 ## Summary
 
 - Iterations completed: 1
-- Current status: Phase B Complete, Starting Pipeline 1
-- Criteria completed: 11/36
+- Current status: Pipeline 1 Complete, Starting Pipeline 2
+- Criteria completed: 16/36
 
 ## How This Works
 
@@ -15,6 +15,44 @@ When context is rotated (fresh agent), the new agent reads this file.
 This is how Ralph maintains continuity across iterations.
 
 ## Session History
+
+### CHECKPOINT 3 Report - Pipeline 1 Complete
+
+**Guest Intelligence System:**
+
+Migration 007_guests.sql creates:
+- `guests`: Core records (name, email, status, social links)
+- `guest_profiles`: Enriched data (title, company, expertise, talking points)
+- `guest_signals`: Evidence/signals for scoring (type, weight, confidence)
+- `guest_scores`: Calculated scores with explanations
+
+**Tools implemented:**
+- `guests.upsert_profile`: Create/update guest profiles
+- `guests.extract_signals`: Store signals with weights
+- `scoring.score_guest`: Calculate comprehensive scores
+
+**Scoring System (v1.0):**
+- Weights: Expertise 30%, Reach 20%, Relevance 25%, Availability 10%, Content 15%
+- Grades: A+ (90+) through F (<40)
+- Explainable: Top factors, concerns, component breakdown
+
+**To rank 5 mock guests:**
+```bash
+# 1. Create guests with profiles
+curl -X POST http://localhost:3000/api/tools/execute \
+  -H "X-Internal-Secret: $SECRET" \
+  -d '{"tool": "guests.upsert_profile", "args": {"name": "Dr. Jane Smith", ...}}'
+
+# 2. Add signals
+curl -X POST http://localhost:3000/api/tools/execute \
+  -d '{"tool": "guests.extract_signals", "args": {"guest_id": "...", "signals": [...]}}'
+
+# 3. Score and rank
+curl -X POST http://localhost:3000/api/tools/execute \
+  -d '{"tool": "scoring.score_guest", "args": {"guest_id": "..."}}'
+```
+
+---
 
 ### CHECKPOINT 2 Report - Phase B Complete
 

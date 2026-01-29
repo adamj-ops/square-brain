@@ -52,7 +52,7 @@ Complete the standalone LifeRX Brain app and implement Pipelines 1–5 for produ
 13. [x] P1.2: Implement guests.upsert_profile tool
 14. [x] P1.3: Implement guests.extract_signals tool
 15. [x] P1.4: Implement scoring.score_guest tool (rules versioned, explainable)
-16. [ ] CHECKPOINT 3: Rank 5 mock guests with explanations
+16. [x] CHECKPOINT 3: Rank 5 mock guests with explanations
 
 ### Pipeline 2 — Interview Intelligence
 
