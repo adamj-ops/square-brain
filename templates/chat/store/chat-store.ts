@@ -6,7 +6,10 @@ export interface Message {
   role: "user" | "assistant";
   content: string;
   timestamp: Date;
+  /** Suggested follow-up actions from final.payload */
   next_actions?: string[];
+  /** Assumptions made during generation from final.payload */
+  assumptions?: string[];
   isStreaming?: boolean;
 }
 
@@ -164,9 +167,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
               content: streamedContent,
             });
           } else if (event.type === "final") {
+            // Read ALL data from final.payload (canonical contract)
             updateMessage(chatId, assistantMessageId, {
               content: event.payload.content,
               next_actions: event.payload.next_actions,
+              assumptions: event.payload.assumptions,
               isStreaming: false,
             });
           }

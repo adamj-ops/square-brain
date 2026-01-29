@@ -56,12 +56,14 @@ export function ChatMain() {
   };
 
   // Map messages to the format expected by ChatConversationView
+  // All payload fields from final.payload are passed through
   const mappedMessages = messages.map((m) => ({
     id: m.id,
     content: m.content,
     sender: m.role === "user" ? "user" as const : "ai" as const,
     timestamp: m.timestamp,
     next_actions: m.next_actions,
+    assumptions: m.assumptions,
     isStreaming: m.isStreaming,
   }));
 

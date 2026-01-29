@@ -9,7 +9,10 @@ interface Message {
   content: string;
   sender: "user" | "ai";
   timestamp: Date;
+  /** From final.payload.next_actions */
   next_actions?: string[];
+  /** From final.payload.assumptions */
+  assumptions?: string[];
   isStreaming?: boolean;
 }
 

@@ -36,18 +36,44 @@ At the end of your response, you MUST suggest 2-3 follow-up actions the user mig
     ...messages.map((m) => ({ role: m.role, content: m.content })),
   ];
 
-  const stream = await openai.chat.completions.create({
-    model,
-    messages: openaiMessages,
-    stream: true,
-  });
-
   const encoder = new TextEncoder();
-  let fullContent = "";
 
   const readableStream = new ReadableStream({
     async start(controller) {
+      let fullContent = "";
+      let finalSent = false;
+
+      /**
+       * Send exactly one final event, then close.
+       * This is idempotent - calling multiple times has no effect after the first.
+       */
+      function sendFinal(content: string, error?: string) {
+        if (finalSent) return;
+        finalSent = true;
+
+        const nextActions = error
+          ? ["Try again", "Rephrase your question"]
+          : generateNextActions(content);
+
+        const finalEvent = JSON.stringify({
+          type: "final",
+          payload: {
+            agent: "Brain",
+            content: error || content,
+            next_actions: nextActions,
+          },
+        });
+        controller.enqueue(encoder.encode(`data: ${finalEvent}\n\n`));
+        controller.close();
+      }
+
       try {
+        const stream = await openai.chat.completions.create({
+          model,
+          messages: openaiMessages,
+          stream: true,
+        });
+
         for await (const chunk of stream) {
           const delta = chunk.choices[0]?.delta?.content;
           if (delta) {
@@ -57,21 +83,20 @@ At the end of your response, you MUST suggest 2-3 follow-up actions the user mig
           }
         }
 
-        // Generate next_actions from the content
-        const nextActions = generateNextActions(fullContent);
-
-        const finalEvent = JSON.stringify({
-          type: "final",
-          payload: {
-            agent: "Brain",
-            content: fullContent,
-            next_actions: nextActions,
-          },
-        });
-        controller.enqueue(encoder.encode(`data: ${finalEvent}\n\n`));
-        controller.close();
+        // Stream complete - send final
+        sendFinal(fullContent);
       } catch (err) {
-        controller.error(err);
+        // On error, still send a final event so client knows stream ended
+        const errorMessage =
+          err instanceof Error ? err.message : "An error occurred";
+        console.error("Stream error:", err);
+        
+        // If we have partial content, include it
+        if (fullContent) {
+          sendFinal(fullContent + "\n\n[Stream interrupted]");
+        } else {
+          sendFinal("", `Error: ${errorMessage}`);
+        }
       }
     },
   });
@@ -89,17 +114,29 @@ function generateNextActions(content: string): string[] {
   const actions: string[] = [];
   const lowerContent = content.toLowerCase();
 
-  if (lowerContent.includes("code") || lowerContent.includes("function") || lowerContent.includes("programming")) {
+  if (
+    lowerContent.includes("code") ||
+    lowerContent.includes("function") ||
+    lowerContent.includes("programming")
+  ) {
     actions.push("Can you explain this code in more detail?");
     actions.push("Show me an example implementation");
   }
 
-  if (lowerContent.includes("step") || lowerContent.includes("process") || lowerContent.includes("how to")) {
+  if (
+    lowerContent.includes("step") ||
+    lowerContent.includes("process") ||
+    lowerContent.includes("how to")
+  ) {
     actions.push("What are common mistakes to avoid?");
     actions.push("Can you provide more examples?");
   }
 
-  if (lowerContent.includes("error") || lowerContent.includes("issue") || lowerContent.includes("problem")) {
+  if (
+    lowerContent.includes("error") ||
+    lowerContent.includes("issue") ||
+    lowerContent.includes("problem")
+  ) {
     actions.push("How can I debug this further?");
     actions.push("What are alternative solutions?");
   }

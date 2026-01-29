@@ -8,7 +8,10 @@ interface Message {
   content: string;
   role: "user" | "assistant";
   timestamp: Date;
+  /** From final.payload.next_actions */
   next_actions?: string[];
+  /** From final.payload.assumptions */
+  assumptions?: string[];
   isStreaming?: boolean;
 }
 
