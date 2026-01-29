@@ -24,6 +24,16 @@ const DEFAULT_ORG_ID = process.env.DEFAULT_ORG_ID || "";
 const MAX_TOOL_CALLS = 5;
 
 /**
+ * Function tool call type - specific subset of OpenAI's union type.
+ * We only create/handle function-type tool calls, not custom tool calls.
+ */
+interface FunctionToolCall {
+  id: string;
+  type: "function";
+  function: { name: string; arguments: string };
+}
+
+/**
  * System prompt with Brain Operating Rules
  */
 const SYSTEM_PROMPT = `You are Brain, an intelligent assistant for LifeRX that helps users manage their knowledge base.
@@ -232,6 +242,7 @@ export async function POST(req: NextRequest) {
 
       /**
        * Sanitize tool result for client (truncate large data)
+       * Bug 1 fix: Always returns consistent types - arrays stay arrays.
        */
       function sanitizeForClient(data: unknown): unknown {
         if (data === null || data === undefined) return null;
@@ -241,21 +252,18 @@ export async function POST(req: NextRequest) {
         }
 
         if (Array.isArray(data)) {
+          // Always return an array, just truncated - consistent type
           const maxItems = 10;
-          const truncated = data.slice(0, maxItems);
-          if (data.length > maxItems) {
-            return { items: truncated, truncated: true, total: data.length };
-          }
-          return truncated;
+          return data.slice(0, maxItems).map((item) => sanitizeForClient(item));
         }
 
         if (typeof data === "object") {
           const result: Record<string, unknown> = {};
           for (const [key, value] of Object.entries(data as Record<string, unknown>)) {
-            if (key === "items" && Array.isArray(value)) {
-              result[key] = sanitizeForClient(value);
-            } else if (typeof value === "string" && value.length > 300) {
+            if (typeof value === "string" && value.length > 300) {
               result[key] = value.slice(0, 300) + "...[truncated]";
+            } else if (Array.isArray(value) || (typeof value === "object" && value !== null)) {
+              result[key] = sanitizeForClient(value);
             } else {
               result[key] = value;
             }
@@ -270,7 +278,7 @@ export async function POST(req: NextRequest) {
        * Execute a tool call and return the result for the model
        */
       async function handleToolCall(
-        toolCall: OpenAI.Chat.Completions.ChatCompletionMessageToolCall
+        toolCall: FunctionToolCall
       ): Promise<{ toolMessage: OpenAI.Chat.Completions.ChatCompletionToolMessageParam; clientData: unknown; explainability: unknown; isError: boolean }> {
         const toolName = toolCall.function.name;
         let args: unknown;
@@ -358,7 +366,7 @@ export async function POST(req: NextRequest) {
 
           // Accumulate the response
           let currentContent = "";
-          const toolCalls: OpenAI.Chat.Completions.ChatCompletionMessageToolCall[] = [];
+          const toolCalls: FunctionToolCall[] = [];
           const toolCallArgBuffers: Map<number, string> = new Map();
 
           for await (const chunk of stream) {
@@ -433,18 +441,21 @@ export async function POST(req: NextRequest) {
           }
 
           // Process tool calls if any
-          if (toolCalls.length > 0) {
-            // Add assistant message with tool calls
+          // Bug 2 fix: Filter invalid tool calls BEFORE adding to messages
+          const validToolCalls = toolCalls.filter(
+            (tc) => tc.id && tc.function?.name
+          );
+
+          if (validToolCalls.length > 0) {
+            // Add assistant message with ONLY valid tool calls
             openaiMessages.push({
               role: "assistant",
               content: currentContent || null,
-              tool_calls: toolCalls,
+              tool_calls: validToolCalls,
             });
 
-            // Execute each tool call
-            for (const toolCall of toolCalls) {
-              if (!toolCall?.function?.name) continue;
-
+            // Execute each valid tool call
+            for (const toolCall of validToolCalls) {
               toolCallCount++;
 
               // Emit tool_start (NO args!)

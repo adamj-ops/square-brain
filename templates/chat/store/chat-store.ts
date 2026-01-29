@@ -136,6 +136,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const chat = get().chats.find((c) => c.id === chatId);
     if (chat?.dbId && chat.messages.length === 0) {
       await get().loadMessages(chatId);
+      // Guard: if user switched away during load, don't update state further
+      if (get().selectedChatId !== chatId) return;
     }
   },
 
