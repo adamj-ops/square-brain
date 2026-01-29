@@ -1,97 +1,495 @@
-import { NextRequest } from "next/server";
+/**
+ * POST /api/assistant/run
+ *
+ * Streaming chat endpoint with tool-calling support.
+ * Emits SSE events: delta, tool_start, tool_result, final
+ *
+ * Phase 4.5: Tool calling integration
+ */
+
+import type { NextRequest } from "next/server";
 import OpenAI from "openai";
+import type {
+  HubEvent,
+  AssistantRunRequest,
+  FinalPayload,
+} from "@/lib/brain/types";
+import type { ToolContext } from "@/lib/tools/types";
+import { executeTool } from "@/lib/tools/executeTool";
+import { getTool } from "@/lib/tools/registry";
 
 export const runtime = "edge";
 
-interface Message {
-  role: "user" | "assistant";
-  content: string;
-}
+const DEFAULT_ORG_ID = process.env.DEFAULT_ORG_ID || "";
+const MAX_TOOL_CALLS = 5;
 
-interface RequestBody {
-  messages: Message[];
-}
+/**
+ * System prompt with Brain Operating Rules
+ */
+const SYSTEM_PROMPT = `You are Brain, an intelligent assistant for LifeRX that helps users manage their knowledge base.
+
+## Brain Operating Rules
+
+1. **Prefer tools when they increase correctness**
+   - Use brain.search_items BEFORE claiming something is already stored
+   - Use brain.search_items to find relevant context before answering knowledge questions
+
+2. **Only persist when explicitly requested**
+   - Use brain.upsert_item ONLY when the user explicitly asks to save, store, persist, remember, or create an item
+   - Never auto-save without user intent
+
+3. **Tool usage**
+   - When searching, be specific with your query terms
+   - When saving, choose the appropriate type (decision, sop, principle, playbook)
+   - Provide clear, descriptive titles and comprehensive content
+
+4. **Response format**
+   - Be concise and helpful
+   - If tool results are empty, acknowledge it clearly
+   - Always provide actionable next steps at the end of your response
+
+Remember: You have access to a persistent knowledge base. Use it to provide accurate, grounded responses.`;
+
+/**
+ * OpenAI tool definitions for brain tools
+ */
+const OPENAI_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
+  {
+    type: "function",
+    function: {
+      name: "brain.search_items",
+      description:
+        "Search the brain knowledge base for stored items (decisions, SOPs, principles, playbooks). " +
+        "Use this to find existing knowledge before answering questions or to verify if something is already stored.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: {
+            type: "string",
+            description: "Text to search for in titles and content",
+          },
+          type: {
+            type: "string",
+            enum: ["decision", "sop", "principle", "playbook"],
+            description: "Filter by item type",
+          },
+          tag: {
+            type: "string",
+            description: "Filter by tag (exact match)",
+          },
+          limit: {
+            type: "number",
+            description: "Maximum number of results (default 20, max 100)",
+          },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "brain.upsert_item",
+      description:
+        "Create or update a brain item. Use ONLY when the user explicitly asks to save, store, persist, or remember something. " +
+        "Types: decision (key choices), sop (standard procedures), principle (guiding beliefs), playbook (step-by-step guides).",
+      parameters: {
+        type: "object",
+        properties: {
+          type: {
+            type: "string",
+            enum: ["decision", "sop", "principle", "playbook"],
+            description: "The type of brain item",
+          },
+          title: {
+            type: "string",
+            description: "A clear, descriptive title (min 3 chars)",
+          },
+          content_md: {
+            type: "string",
+            description: "The full content in markdown format (min 20 chars)",
+          },
+          tags: {
+            type: "array",
+            items: { type: "string" },
+            description: "Optional tags for categorization (max 20)",
+          },
+          confidence_score: {
+            type: "number",
+            description: "Confidence level 0-1 (default 0.75)",
+          },
+          canonical_key: {
+            type: "string",
+            description:
+              "Optional unique key for upsert. If provided and exists, updates the existing item.",
+          },
+        },
+        required: ["type", "title", "content_md"],
+        additionalProperties: false,
+      },
+    },
+  },
+];
 
 export async function POST(req: NextRequest) {
-  const { messages }: RequestBody = await req.json();
+  // Parse request
+  let body: AssistantRunRequest;
+  try {
+    body = await req.json();
+  } catch {
+    return new Response(JSON.stringify({ error: "Invalid JSON body" }), {
+      status: 400,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  const { messages, context } = body;
+
+  if (!messages || !Array.isArray(messages)) {
+    return new Response(JSON.stringify({ error: "messages array is required" }), {
+      status: 400,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
 
   const apiKey = process.env.OPENAI_API_KEY;
   const model = process.env.OPENAI_MODEL || "gpt-4o";
 
   if (!apiKey) {
+    return new Response(JSON.stringify({ error: "OPENAI_API_KEY not configured" }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  // Build tool context
+  const toolCtx: ToolContext = {
+    org_id: context?.org_id || DEFAULT_ORG_ID,
+    session_id: context?.session_id || crypto.randomUUID(),
+    user_id: context?.user_id,
+    allowWrites: context?.allowWrites ?? false,
+    metadata: { source: "assistant-run" },
+  };
+
+  if (!toolCtx.org_id) {
     return new Response(
-      JSON.stringify({ error: "OPENAI_API_KEY not configured" }),
-      { status: 500, headers: { "Content-Type": "application/json" } }
+      JSON.stringify({ error: "org_id required (set DEFAULT_ORG_ID or pass in context)" }),
+      { status: 400, headers: { "Content-Type": "application/json" } }
     );
   }
 
   const openai = new OpenAI({ apiKey });
+  const encoder = new TextEncoder();
 
-  const systemPrompt = `You are Brain, a helpful AI assistant. Be concise and helpful.
-
-At the end of your response, you MUST suggest 2-3 follow-up actions the user might want to take. These should be natural continuations of the conversation.`;
-
+  // Build initial messages
   const openaiMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
-    { role: "system", content: systemPrompt },
-    ...messages.map((m) => ({ role: m.role, content: m.content })),
+    { role: "system", content: SYSTEM_PROMPT },
+    ...messages.map((m) => ({
+      role: m.role as "user" | "assistant",
+      content: m.content,
+    })),
   ];
 
-  const encoder = new TextEncoder();
+  // AbortController for client disconnect
+  const abortController = new AbortController();
+  req.signal.addEventListener("abort", () => {
+    abortController.abort();
+  });
 
   const readableStream = new ReadableStream({
     async start(controller) {
       let fullContent = "";
       let finalSent = false;
+      let toolCallCount = 0;
+
+      /**
+       * Send an SSE event to the client
+       */
+      function sendEvent(event: HubEvent) {
+        if (finalSent && event.type !== "final") return;
+        const data = JSON.stringify(event);
+        controller.enqueue(encoder.encode(`data: ${data}\n\n`));
+      }
 
       /**
        * Send exactly one final event, then close.
-       * This is idempotent - calling multiple times has no effect after the first.
        */
       function sendFinal(content: string, error?: string) {
         if (finalSent) return;
         finalSent = true;
 
-        const nextActions = error
-          ? ["Try again", "Rephrase your question"]
-          : generateNextActions(content);
+        const payload: FinalPayload = {
+          agent: "Brain",
+          content: error || content,
+          next_actions: error
+            ? ["Try again", "Rephrase your question"]
+            : generateNextActions(content, messages),
+        };
 
-        const finalEvent = JSON.stringify({
-          type: "final",
-          payload: {
-            agent: "Brain",
-            content: error || content,
-            next_actions: nextActions,
-          },
-        });
-        controller.enqueue(encoder.encode(`data: ${finalEvent}\n\n`));
+        sendEvent({ type: "final", payload });
         controller.close();
       }
 
-      try {
-        const stream = await openai.chat.completions.create({
-          model,
-          messages: openaiMessages,
-          stream: true,
-        });
+      /**
+       * Sanitize tool result for client (truncate large data)
+       */
+      function sanitizeForClient(data: unknown): unknown {
+        if (data === null || data === undefined) return null;
 
-        for await (const chunk of stream) {
-          const delta = chunk.choices[0]?.delta?.content;
-          if (delta) {
-            fullContent += delta;
-            const event = JSON.stringify({ type: "delta", content: delta });
-            controller.enqueue(encoder.encode(`data: ${event}\n\n`));
+        if (typeof data === "string") {
+          return data.length > 500 ? data.slice(0, 500) + "...[truncated]" : data;
+        }
+
+        if (Array.isArray(data)) {
+          const maxItems = 10;
+          const truncated = data.slice(0, maxItems);
+          if (data.length > maxItems) {
+            return { items: truncated, truncated: true, total: data.length };
+          }
+          return truncated;
+        }
+
+        if (typeof data === "object") {
+          const result: Record<string, unknown> = {};
+          for (const [key, value] of Object.entries(data as Record<string, unknown>)) {
+            if (key === "items" && Array.isArray(value)) {
+              result[key] = sanitizeForClient(value);
+            } else if (typeof value === "string" && value.length > 300) {
+              result[key] = value.slice(0, 300) + "...[truncated]";
+            } else {
+              result[key] = value;
+            }
+          }
+          return result;
+        }
+
+        return data;
+      }
+
+      /**
+       * Execute a tool call and return the result for the model
+       */
+      async function handleToolCall(
+        toolCall: OpenAI.Chat.Completions.ChatCompletionMessageToolCall
+      ): Promise<{ toolMessage: OpenAI.Chat.Completions.ChatCompletionToolMessageParam; clientData: unknown; explainability: unknown; isError: boolean }> {
+        const toolName = toolCall.function.name;
+        let args: unknown;
+
+        try {
+          args = JSON.parse(toolCall.function.arguments);
+        } catch {
+          return {
+            toolMessage: {
+              role: "tool",
+              tool_call_id: toolCall.id,
+              content: JSON.stringify({ error: "Invalid tool arguments JSON" }),
+            },
+            clientData: null,
+            explainability: { error: "Invalid arguments" },
+            isError: true,
+          };
+        }
+
+        // Check write permission
+        const tool = getTool(toolName);
+        if (tool?.writes && !toolCtx.allowWrites) {
+          return {
+            toolMessage: {
+              role: "tool",
+              tool_call_id: toolCall.id,
+              content: JSON.stringify({
+                error: "Writes are disabled for this request. The user must enable writes to save items.",
+              }),
+            },
+            clientData: null,
+            explainability: { blocked: "writes_disabled" },
+            isError: true,
+          };
+        }
+
+        // Execute tool
+        const result = await executeTool(toolName, args, toolCtx);
+
+        if (result.ok) {
+          return {
+            toolMessage: {
+              role: "tool",
+              tool_call_id: toolCall.id,
+              content: JSON.stringify(result.response.data),
+            },
+            clientData: sanitizeForClient(result.response.data),
+            explainability: result.response.explainability,
+            isError: false,
+          };
+        } else {
+          return {
+            toolMessage: {
+              role: "tool",
+              tool_call_id: toolCall.id,
+              content: JSON.stringify({ error: result.error.message }),
+            },
+            clientData: { error: result.error.message },
+            explainability: { error_code: result.error.code },
+            isError: true,
+          };
+        }
+      }
+
+      try {
+        // Tool-calling loop
+        let continueLoop = true;
+
+        while (continueLoop && toolCallCount < MAX_TOOL_CALLS) {
+          if (abortController.signal.aborted) {
+            controller.close();
+            return;
+          }
+
+          // Make API call with streaming
+          const stream = await openai.chat.completions.create(
+            {
+              model,
+              messages: openaiMessages,
+              tools: OPENAI_TOOLS,
+              stream: true,
+            },
+            { signal: abortController.signal }
+          );
+
+          // Accumulate the response
+          let currentContent = "";
+          const toolCalls: OpenAI.Chat.Completions.ChatCompletionMessageToolCall[] = [];
+          const toolCallArgBuffers: Map<number, string> = new Map();
+
+          for await (const chunk of stream) {
+            if (abortController.signal.aborted) {
+              controller.close();
+              return;
+            }
+
+            const choice = chunk.choices[0];
+            if (!choice) continue;
+
+            // Handle content deltas
+            const contentDelta = choice.delta?.content;
+            if (contentDelta) {
+              currentContent += contentDelta;
+              fullContent += contentDelta;
+              sendEvent({ type: "delta", content: contentDelta });
+            }
+
+            // Handle tool call deltas
+            const toolCallDeltas = choice.delta?.tool_calls;
+            if (toolCallDeltas) {
+              for (const tcDelta of toolCallDeltas) {
+                const idx = tcDelta.index;
+
+                // Initialize tool call if new
+                if (!toolCalls[idx]) {
+                  toolCalls[idx] = {
+                    id: tcDelta.id || "",
+                    type: "function",
+                    function: {
+                      name: tcDelta.function?.name || "",
+                      arguments: "",
+                    },
+                  };
+                  toolCallArgBuffers.set(idx, "");
+                }
+
+                // Update tool call ID if provided
+                if (tcDelta.id) {
+                  toolCalls[idx].id = tcDelta.id;
+                }
+
+                // Update function name if provided
+                if (tcDelta.function?.name) {
+                  toolCalls[idx].function.name = tcDelta.function.name;
+                }
+
+                // Accumulate arguments
+                if (tcDelta.function?.arguments) {
+                  const currentArgs = toolCallArgBuffers.get(idx) || "";
+                  toolCallArgBuffers.set(idx, currentArgs + tcDelta.function.arguments);
+                }
+              }
+            }
+
+            // Check if done
+            if (choice.finish_reason === "stop") {
+              continueLoop = false;
+              break;
+            }
+
+            if (choice.finish_reason === "tool_calls") {
+              // Finalize tool call arguments
+              for (const [idx, args] of toolCallArgBuffers) {
+                if (toolCalls[idx]) {
+                  toolCalls[idx].function.arguments = args;
+                }
+              }
+              break;
+            }
+          }
+
+          // Process tool calls if any
+          if (toolCalls.length > 0) {
+            // Add assistant message with tool calls
+            openaiMessages.push({
+              role: "assistant",
+              content: currentContent || null,
+              tool_calls: toolCalls,
+            });
+
+            // Execute each tool call
+            for (const toolCall of toolCalls) {
+              if (!toolCall?.function?.name) continue;
+
+              toolCallCount++;
+
+              // Emit tool_start (NO args!)
+              sendEvent({ type: "tool_start", tool: toolCall.function.name });
+
+              // Execute tool
+              const { toolMessage, clientData, explainability, isError } =
+                await handleToolCall(toolCall);
+
+              // Emit tool_result (sanitized data only)
+              sendEvent({
+                type: "tool_result",
+                tool: toolCall.function.name,
+                data: clientData,
+                explainability,
+                error: isError || undefined,
+              });
+
+              // Add tool result to messages for next iteration
+              openaiMessages.push(toolMessage);
+            }
+          } else {
+            // No tool calls, we're done
+            continueLoop = false;
           }
         }
 
-        // Stream complete - send final
+        // Check if we hit the tool call limit
+        if (toolCallCount >= MAX_TOOL_CALLS && !finalSent) {
+          fullContent +=
+            "\n\n*Note: Maximum tool calls reached for this request.*";
+        }
+
+        // Send final
         sendFinal(fullContent);
       } catch (err) {
-        // On error, still send a final event so client knows stream ended
-        const errorMessage =
-          err instanceof Error ? err.message : "An error occurred";
-        console.error("Stream error:", err);
-        
-        // If we have partial content, include it
+        // Handle abort
+        if (abortController.signal.aborted) {
+          controller.close();
+          return;
+        }
+
+        const errorMessage = err instanceof Error ? err.message : "An error occurred";
+        console.error("Assistant stream error:", err);
+
         if (fullContent) {
           sendFinal(fullContent + "\n\n[Stream interrupted]");
         } else {
@@ -110,42 +508,73 @@ At the end of your response, you MUST suggest 2-3 follow-up actions the user mig
   });
 }
 
-function generateNextActions(content: string): string[] {
+/**
+ * Generate next actions based on content and conversation
+ */
+function generateNextActions(
+  content: string,
+  messages: { role: string; content: string }[]
+): string[] {
   const actions: string[] = [];
   const lowerContent = content.toLowerCase();
+  const lastUserMessage = messages
+    .filter((m) => m.role === "user")
+    .pop()?.content.toLowerCase() || "";
 
+  // Check for search-related responses
   if (
-    lowerContent.includes("code") ||
-    lowerContent.includes("function") ||
-    lowerContent.includes("programming")
+    lowerContent.includes("found") ||
+    lowerContent.includes("search") ||
+    lowerContent.includes("result")
   ) {
-    actions.push("Can you explain this code in more detail?");
-    actions.push("Show me an example implementation");
+    actions.push("Search for something else");
+    actions.push("Save this information to my brain");
   }
 
+  // Check for save/persist responses
   if (
-    lowerContent.includes("step") ||
-    lowerContent.includes("process") ||
-    lowerContent.includes("how to")
+    lowerContent.includes("saved") ||
+    lowerContent.includes("stored") ||
+    lowerContent.includes("created")
   ) {
-    actions.push("What are common mistakes to avoid?");
-    actions.push("Can you provide more examples?");
+    actions.push("View saved items");
+    actions.push("Save another item");
   }
 
+  // Check for no results
   if (
-    lowerContent.includes("error") ||
-    lowerContent.includes("issue") ||
-    lowerContent.includes("problem")
+    lowerContent.includes("no results") ||
+    lowerContent.includes("nothing found") ||
+    lowerContent.includes("couldn't find")
   ) {
-    actions.push("How can I debug this further?");
-    actions.push("What are alternative solutions?");
+    actions.push("Try a different search term");
+    actions.push("Save this as new information");
   }
 
+  // Check user intent from last message
+  if (lastUserMessage.includes("save") || lastUserMessage.includes("store")) {
+    actions.push("Confirm the item was saved correctly");
+    actions.push("Add more details to this item");
+  }
+
+  if (lastUserMessage.includes("search") || lastUserMessage.includes("find")) {
+    actions.push("Refine the search");
+    actions.push("Search in a different category");
+  }
+
+  // Default actions
   if (actions.length === 0) {
-    actions.push("Tell me more about this topic");
-    actions.push("Can you give me a practical example?");
-    actions.push("What should I learn next?");
+    actions.push("Search my brain for related topics");
+    actions.push("Save this as a new item");
+    actions.push("Ask a follow-up question");
   }
 
-  return actions.slice(0, 3);
+  // Always include a general action
+  if (!actions.some((a) => a.toLowerCase().includes("question"))) {
+    actions.push("Ask me anything else");
+  }
+
+  // Return 2-4 unique actions
+  const unique = [...new Set(actions)];
+  return unique.slice(0, 4);
 }
