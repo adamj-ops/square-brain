@@ -133,3 +133,32 @@ EOF
 [15:24:05] 🔴 SHELL mkdir -p /Users/adamjudeh/square-ui-1/templates/chat/app/api/internal/ingest/docs → exit 0
 [15:24:25] 🔴 TOKENS: 78954 / 80000 (98%) - rotation imminent [read:301KB write:0KB assist:3KB shell:0KB]
 [15:24:34] 🔴 SHELL cd /Users/adamjudeh/square-ui-1/templates/chat && pnpm build 2>&1 → exit 0
+[15:24:48] 🔴 SHELL cd /Users/adamjudeh/square-ui-1 && git add -A && git commit -m "$(cat <<'EOF'
+ralph: complete Phase B ingestion endpoints
+
+B1: Firecrawl ingestion - already implemented
+  - /api/internal/ingest/firecrawl for scrape/crawl
+  - lib/firecrawl/client.ts + ingest.ts
+
+B2: Internal docs ingestion - new endpoint
+  - /api/internal/ingest/docs for MD/MDX files
+  - Supports ingest_all and ingest_single actions
+  - source_type=internal_docs, idempotent via content hash
+
+B3: Apify ingestion seam - new endpoint
+  - /api/internal/ingest/apify for normalized payloads
+  - Allowlist for trusted Apify actor IDs
+  - Added "apify" to SourceType
+
+Build verified passing. All three ingestion routes active.
+
+EOF
+)" → exit 0
+[15:24:54] 🔴 READ /Users/adamjudeh/square-ui-1/templates/chat/lib/tools/implementations/brain-semantic-search.ts (174 lines, ~16.9KB)
+[15:24:54] 🔴 ROTATE: Token threshold reached (83351 >= 80000)
+[15:24:54] 🔴 READ /Users/adamjudeh/square-ui-1/templates/chat/lib/rag/search.ts (140 lines, ~13.6KB)
+[15:24:54] 🔴 ROTATE: Token threshold reached (86851 >= 80000)
+
+═══════════════════════════════════════════════════════════════
+Ralph Session Started: Thu Jan 29 15:24:56 CST 2026
+═══════════════════════════════════════════════════════════════

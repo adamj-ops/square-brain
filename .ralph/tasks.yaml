@@ -3,76 +3,76 @@
 # DO NOT EDIT - regenerated on task file change
 
 source_file: RALPH_TASK.md
-source_mtime: 1769710561
-generated_at: 2026-01-29T18:19:28Z
+source_mtime: 1769721882
+generated_at: 2026-01-29T21:24:54Z
 
 tasks:
   - id: "line_34"
     line_number: 34
-    status: pending
+    status: completed
     parallel_group: 999999
     description: A1.1: Commit all pending/untracked files in templates/chat/
     indent_level: 0
     raw_marker: 1.
   - id: "line_35"
     line_number: 35
-    status: pending
+    status: completed
     parallel_group: 999999
     description: A1.2: Remove obsolete code and validate migrations 004-006
     indent_level: 0
     raw_marker: 2.
   - id: "line_36"
     line_number: 36
-    status: pending
+    status: completed
     parallel_group: 999999
     description: A1.3: Create README.md with setup, env vars, migrations, how to run/test
     indent_level: 0
     raw_marker: 3.
   - id: "line_37"
     line_number: 37
-    status: pending
+    status: completed
     parallel_group: 999999
     description: A1.4: Create .env.local.example (NO secrets, just placeholders)
     indent_level: 0
     raw_marker: 4.
   - id: "line_38"
     line_number: 38
-    status: pending
+    status: completed
     parallel_group: 999999
     description: A2.1: Remove Square UI branding from app
     indent_level: 0
     raw_marker: 5.
   - id: "line_39"
     line_number: 39
-    status: pending
+    status: completed
     parallel_group: 999999
     description: A2.2: Add LifeRX Brain branding (app name, icon, favicon, metadata)
     indent_level: 0
     raw_marker: 6.
   - id: "line_40"
     line_number: 40
-    status: pending
+    status: completed
     parallel_group: 999999
     description: CHECKPOINT 1: Report Phase A changes and how to test
     indent_level: 0
     raw_marker: 7.
   - id: "line_44"
     line_number: 44
-    status: pending
+    status: completed
     parallel_group: 999999
     description: B1: Implement Firecrawl ingestion endpoint /api/internal/ingest/firecrawl (scrape + crawl, normalize, ingest to ai_docs + ai_chunks)
     indent_level: 0
     raw_marker: 8.
   - id: "line_45"
     line_number: 45
-    status: pending
+    status: completed
     parallel_group: 999999
     description: B2: Implement internal docs ingestion /api/internal/ingest/docs (MD/MDX, source_type=internal_docs, idempotent)
     indent_level: 0
     raw_marker: 9.
   - id: "line_46"
     line_number: 46
-    status: pending
+    status: completed
     parallel_group: 999999
     description: B3: Implement Apify ingestion seam /api/internal/ingest/apify (accept normalized payloads, allowlist)
     indent_level: 0
