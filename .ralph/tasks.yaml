@@ -1,0 +1,261 @@
+# Ralph Task Cache
+# Auto-generated from RALPH_TASK.md
+# DO NOT EDIT - regenerated on task file change
+
+source_file: RALPH_TASK.md
+source_mtime: 1769710561
+generated_at: 2026-01-29T18:19:28Z
+
+tasks:
+  - id: "line_34"
+    line_number: 34
+    status: pending
+    parallel_group: 999999
+    description: A1.1: Commit all pending/untracked files in templates/chat/
+    indent_level: 0
+    raw_marker: 1.
+  - id: "line_35"
+    line_number: 35
+    status: pending
+    parallel_group: 999999
+    description: A1.2: Remove obsolete code and validate migrations 004-006
+    indent_level: 0
+    raw_marker: 2.
+  - id: "line_36"
+    line_number: 36
+    status: pending
+    parallel_group: 999999
+    description: A1.3: Create README.md with setup, env vars, migrations, how to run/test
+    indent_level: 0
+    raw_marker: 3.
+  - id: "line_37"
+    line_number: 37
+    status: pending
+    parallel_group: 999999
+    description: A1.4: Create .env.local.example (NO secrets, just placeholders)
+    indent_level: 0
+    raw_marker: 4.
+  - id: "line_38"
+    line_number: 38
+    status: pending
+    parallel_group: 999999
+    description: A2.1: Remove Square UI branding from app
+    indent_level: 0
+    raw_marker: 5.
+  - id: "line_39"
+    line_number: 39
+    status: pending
+    parallel_group: 999999
+    description: A2.2: Add LifeRX Brain branding (app name, icon, favicon, metadata)
+    indent_level: 0
+    raw_marker: 6.
+  - id: "line_40"
+    line_number: 40
+    status: pending
+    parallel_group: 999999
+    description: CHECKPOINT 1: Report Phase A changes and how to test
+    indent_level: 0
+    raw_marker: 7.
+  - id: "line_44"
+    line_number: 44
+    status: pending
+    parallel_group: 999999
+    description: B1: Implement Firecrawl ingestion endpoint /api/internal/ingest/firecrawl (scrape + crawl, normalize, ingest to ai_docs + ai_chunks)
+    indent_level: 0
+    raw_marker: 8.
+  - id: "line_45"
+    line_number: 45
+    status: pending
+    parallel_group: 999999
+    description: B2: Implement internal docs ingestion /api/internal/ingest/docs (MD/MDX, source_type=internal_docs, idempotent)
+    indent_level: 0
+    raw_marker: 9.
+  - id: "line_46"
+    line_number: 46
+    status: pending
+    parallel_group: 999999
+    description: B3: Implement Apify ingestion seam /api/internal/ingest/apify (accept normalized payloads, allowlist)
+    indent_level: 0
+    raw_marker: 10.
+  - id: "line_47"
+    line_number: 47
+    status: pending
+    parallel_group: 999999
+    description: CHECKPOINT 2: Verify docs ingest + brain.semantic_search works
+    indent_level: 0
+    raw_marker: 11.
+  - id: "line_51"
+    line_number: 51
+    status: pending
+    parallel_group: 999999
+    description: P1.1: Create tables: guests, guest_profiles, guest_signals, guest_scores (migration)
+    indent_level: 0
+    raw_marker: 12.
+  - id: "line_52"
+    line_number: 52
+    status: pending
+    parallel_group: 999999
+    description: P1.2: Implement guests.upsert_profile tool
+    indent_level: 0
+    raw_marker: 13.
+  - id: "line_53"
+    line_number: 53
+    status: pending
+    parallel_group: 999999
+    description: P1.3: Implement guests.extract_signals tool
+    indent_level: 0
+    raw_marker: 14.
+  - id: "line_54"
+    line_number: 54
+    status: pending
+    parallel_group: 999999
+    description: P1.4: Implement scoring.score_guest tool (rules versioned, explainable)
+    indent_level: 0
+    raw_marker: 15.
+  - id: "line_55"
+    line_number: 55
+    status: pending
+    parallel_group: 999999
+    description: CHECKPOINT 3: Rank 5 mock guests with explanations
+    indent_level: 0
+    raw_marker: 16.
+  - id: "line_59"
+    line_number: 59
+    status: pending
+    parallel_group: 999999
+    description: P2.1: Create tables: interviews, interview_quotes, themes, interview_themes (migration)
+    indent_level: 0
+    raw_marker: 17.
+  - id: "line_60"
+    line_number: 60
+    status: pending
+    parallel_group: 999999
+    description: P2.2: Implement interviews.add_quote tool
+    indent_level: 0
+    raw_marker: 18.
+  - id: "line_61"
+    line_number: 61
+    status: pending
+    parallel_group: 999999
+    description: P2.3: Implement themes.upsert_theme + themes.link_to_interview tools
+    indent_level: 0
+    raw_marker: 19.
+  - id: "line_62"
+    line_number: 62
+    status: pending
+    parallel_group: 999999
+    description: P2.4: Implement theme_scanner job (auto-tag expertise, identify recurring themes)
+    indent_level: 0
+    raw_marker: 20.
+  - id: "line_63"
+    line_number: 63
+    status: pending
+    parallel_group: 999999
+    description: CHECKPOINT 4: Query themes + quotes across interviews
+    indent_level: 0
+    raw_marker: 21.
+  - id: "line_67"
+    line_number: 67
+    status: pending
+    parallel_group: 999999
+    description: P3.1: Create content_assets table (migration)
+    indent_level: 0
+    raw_marker: 22.
+  - id: "line_68"
+    line_number: 68
+    status: pending
+    parallel_group: 999999
+    description: P3.2: Implement content.generate_assets tool (quote cards, carousel outlines, shortform scripts, audio bite ideas)
+    indent_level: 0
+    raw_marker: 23.
+  - id: "line_69"
+    line_number: 69
+    status: pending
+    parallel_group: 999999
+    description: CHECKPOINT 5: Generate content ideas from one interview
+    indent_level: 0
+    raw_marker: 24.
+  - id: "line_73"
+    line_number: 73
+    status: pending
+    parallel_group: 999999
+    description: P4.1: Create tables: outreach_sequences, outreach_messages, outreach_events (migration)
+    indent_level: 0
+    raw_marker: 25.
+  - id: "line_74"
+    line_number: 74
+    status: pending
+    parallel_group: 999999
+    description: P4.2: Implement outreach.compose_message tool
+    indent_level: 0
+    raw_marker: 26.
+  - id: "line_75"
+    line_number: 75
+    status: pending
+    parallel_group: 999999
+    description: P4.3: Implement outreach.send_email tool (Resend, requires allowWrites + approval flag)
+    indent_level: 0
+    raw_marker: 27.
+  - id: "line_76"
+    line_number: 76
+    status: pending
+    parallel_group: 999999
+    description: CHECKPOINT 6: Draft + approve + send test email (safe target)
+    indent_level: 0
+    raw_marker: 28.
+  - id: "line_80"
+    line_number: 80
+    status: pending
+    parallel_group: 999999
+    description: P5.1: Create tables: quiz_responses, audience_segments, segment_rules, ctas (migration)
+    indent_level: 0
+    raw_marker: 29.
+  - id: "line_81"
+    line_number: 81
+    status: pending
+    parallel_group: 999999
+    description: P5.2: Implement audience.score_quiz tool (sliding interdependency scoring)
+    indent_level: 0
+    raw_marker: 30.
+  - id: "line_82"
+    line_number: 82
+    status: pending
+    parallel_group: 999999
+    description: P5.3: Implement audience.assign_segment tool (CTA suggestions tied to segment + emotion)
+    indent_level: 0
+    raw_marker: 31.
+  - id: "line_83"
+    line_number: 83
+    status: pending
+    parallel_group: 999999
+    description: CHECKPOINT 7: Score sample quiz + assign segment
+    indent_level: 0
+    raw_marker: 32.
+  - id: "line_87"
+    line_number: 87
+    status: pending
+    parallel_group: 999999
+    description: F1: Create smoke test script (ingest → search → tool call → audit log)
+    indent_level: 0
+    raw_marker: 33.
+  - id: "line_88"
+    line_number: 88
+    status: pending
+    parallel_group: 999999
+    description: F2: Ensure all pipelines can be triggered via API/tools
+    indent_level: 0
+    raw_marker: 34.
+  - id: "line_89"
+    line_number: 89
+    status: pending
+    parallel_group: 999999
+    description: F3: Final README update (system overview, pipeline descriptions, how to test each)
+    indent_level: 0
+    raw_marker: 35.
+  - id: "line_90"
+    line_number: 90
+    status: pending
+    parallel_group: 999999
+    description: CHECKPOINT 8: Final report + release readiness
+    indent_level: 0
+    raw_marker: 36.
