@@ -197,7 +197,7 @@ async function run(
       step_number: args.step_number || null,
       variables: args.variables || {},
       status,
-      requires_approval: args.requires_approval,
+      requires_approval: args.requires_approval ?? true,
       scheduled_for: args.scheduled_for || null,
       generated_by: 'ai',
     })
@@ -226,7 +226,7 @@ async function run(
     data: {
       message_id: message.id,
       status: message.status,
-      requires_approval: args.requires_approval,
+      requires_approval: args.requires_approval ?? true,
       recipient_email: args.recipient_email,
       subject: args.subject,
     },
