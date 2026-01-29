@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
+  MessageCircleIcon,
   SearchIcon,
   HomeIcon,
   SparklesIcon,
@@ -43,6 +44,7 @@ import Link from "next/link";
 const iconMap = {
   zap: ZapIcon,
   "message-circle-dashed": MessageCircleDashedIcon,
+  "message-circle": MessageCircleIcon,
   "wand-sparkles": WandSparklesIcon,
   box: BoxIcon,
 };
@@ -61,8 +63,15 @@ export function ChatSidebar() {
     archiveChat,
     unarchiveChat,
     deleteChat,
+    loadConversations,
+    isLoading,
   } = useChatStore();
   const [selectedTeam, setSelectedTeam] = useState("personal");
+
+  // Load conversations from DB on mount
+  useEffect(() => {
+    loadConversations();
+  }, [loadConversations]);
 
   const recentChats = chats.filter((chat) => !chat.isArchived);
   const archivedChats = chats.filter((chat) => chat.isArchived);
