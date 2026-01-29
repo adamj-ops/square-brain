@@ -57,9 +57,10 @@ async function main() {
   );
 
   if (upsertResult.ok) {
+    const data = upsertResult.response.data as { id: string; version: number };
     console.log("   ✓ Upsert succeeded:");
-    console.log(`     - id: ${upsertResult.response.data.id}`);
-    console.log(`     - version: ${upsertResult.response.data.version}`);
+    console.log(`     - id: ${data.id}`);
+    console.log(`     - version: ${data.version}`);
     console.log(`     - explainability:`, upsertResult.response.explainability);
   } else {
     console.error("   ✗ Upsert failed:", upsertResult.error);

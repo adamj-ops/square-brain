@@ -98,7 +98,7 @@ async function sendMessage(
     // Check for leaked tool args
     if (
       event.type === "tool_start" &&
-      "args" in (event as Record<string, unknown>)
+      "args" in (event as unknown as Record<string, unknown>)
     ) {
       hasToolArgs = true;
       console.error("ERROR: tool_start contains args field!");
@@ -322,7 +322,7 @@ async function main() {
       hasToolArgs ||
       events.some(
         (e) =>
-          e.type === "tool_start" && "args" in (e as Record<string, unknown>)
+          e.type === "tool_start" && "args" in (e as unknown as Record<string, unknown>)
       );
 
     if (hasArgsKey) {

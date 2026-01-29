@@ -3,30 +3,39 @@
  *
  * Central registry of all available tools.
  * Phase 4: Tool Executor + Audit Logging
+ * Phase 5.1: RAG Semantic Search
  */
 
 import type { ToolDefinition } from "./types";
 import { brainUpsertItemTool } from "./implementations/brain-upsert-item";
 import { brainSearchItemsTool } from "./implementations/brain-search-items";
+import { brainSemanticSearchTool } from "./implementations/brain-semantic-search";
+// Note: knowledgeIngestFirecrawlTool not registered here because it requires
+// Node.js runtime (crypto). Use the HTTP endpoint /api/internal/ingest/firecrawl instead.
 
 /**
  * Map of tool name -> tool definition
+ * Using `any` generics to allow storing tools with different arg/result types
  */
-const TOOLS: Map<string, ToolDefinition> = new Map();
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const TOOLS: Map<string, ToolDefinition<any, any>> = new Map();
 
 /**
  * Register a tool in the registry
  */
-function registerTool(tool: ToolDefinition): void {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function registerTool(tool: ToolDefinition<any, any>): void {
   if (TOOLS.has(tool.name)) {
     console.warn(`[registry] Tool "${tool.name}" is already registered, overwriting`);
   }
   TOOLS.set(tool.name, tool);
 }
 
-// Register core tools
+// Register core tools (Edge-compatible)
 registerTool(brainUpsertItemTool);
 registerTool(brainSearchItemsTool);
+registerTool(brainSemanticSearchTool);
+// knowledgeIngestFirecrawlTool requires Node.js - use HTTP endpoint instead
 
 /**
  * Get a tool by name
