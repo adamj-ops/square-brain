@@ -117,44 +117,39 @@ CREATE TABLE IF NOT EXISTS guest_signals (
   
   -- Signal classification
   signal_type TEXT NOT NULL CHECK (signal_type IN (
-    'expertise',         -- Demonstrated expertise in a topic
+    'expertise',         -- Demonstrated expertise
     'achievement',       -- Notable accomplishment
-    'mention',           -- Mentioned in media/content
-    'appearance',        -- Podcast/speaking appearance
-    'publication',       -- Book, article, paper
-    'social_activity',   -- Notable social media activity
-    'connection',        -- Connection to our network
-    'trigger_event',     -- Recent news/event about them
-    'sentiment',         -- Sentiment from their content
-    'custom'             -- Other signal types
+    'media_mention',     -- Press/media coverage
+    'social_proof',      -- Followers, engagement
+    'content',           -- Published content (books, articles)
+    'speaking',          -- Speaking engagements
+    'endorsement',       -- Recommendations
+    'controversy',       -- Potentially negative signal
+    'availability',      -- Scheduling/availability signal
+    'engagement',        -- Response/engagement with outreach
+    'other'
   )),
   
   -- Signal content
   title TEXT NOT NULL,       -- Brief title/description
   description TEXT,          -- Full description
-  value TEXT,                -- The actual signal value/data
+  evidence_url TEXT,         -- Link to evidence
+  evidence_text TEXT,        -- Quoted text as evidence
   
-  -- Strength & Confidence
-  strength NUMERIC(3,2) DEFAULT 0.5,    -- 0-1, how strong this signal is
+  -- Weight & Confidence
+  weight NUMERIC(4,2) DEFAULT 0.5,      -- -1 to 1, negative for red flags
   confidence NUMERIC(3,2) DEFAULT 0.5,  -- 0-1, how confident we are in this data
   
   -- Source tracking
-  source_type TEXT,      -- 'scraped', 'manual', 'llm_extracted', 'api'
-  source_url TEXT,
-  source_content_id UUID,  -- Reference to ai_docs/ai_chunks if applicable
-  
-  -- Timing
-  signal_date TIMESTAMPTZ,  -- When the signal occurred (if known)
-  expires_at TIMESTAMPTZ,   -- When this signal becomes stale
+  source TEXT,            -- Where signal was found
+  signal_date DATE,       -- When the signal occurred (if known)
+  extracted_by TEXT,      -- 'ai', 'manual', 'scraper'
   
   -- Metadata
   metadata JSONB DEFAULT '{}',
   
   -- Timestamps
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  
-  -- Prevent exact duplicate signals
-  CONSTRAINT guest_signals_unique UNIQUE (guest_id, signal_type, title, value)
+  created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- ============================================================================
@@ -216,7 +211,7 @@ CREATE INDEX IF NOT EXISTS idx_guest_signals_guest_id ON guest_signals(guest_id)
 CREATE INDEX IF NOT EXISTS idx_guest_signals_org_id ON guest_signals(org_id);
 CREATE INDEX IF NOT EXISTS idx_guest_signals_type ON guest_signals(signal_type);
 CREATE INDEX IF NOT EXISTS idx_guest_signals_date ON guest_signals(signal_date DESC);
-CREATE INDEX IF NOT EXISTS idx_guest_signals_strength ON guest_signals(strength DESC);
+CREATE INDEX IF NOT EXISTS idx_guest_signals_weight ON guest_signals(weight DESC);
 
 -- Guest scores indexes
 CREATE INDEX IF NOT EXISTS idx_guest_scores_guest_id ON guest_scores(guest_id);
