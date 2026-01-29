@@ -78,7 +78,7 @@ Complete the standalone LifeRX Brain app and implement Pipelines 1–5 for produ
 ### Pipeline 5 — Audience & Quiz Segmentation
 
 29. [x] P5.1: Create tables: quiz_responses, audience_segments, segment_rules, ctas (migration)
-30. [ ] P5.2: Implement audience.score_quiz tool (sliding interdependency scoring)
+30. [x] P5.2: Implement audience.score_quiz tool (sliding interdependency scoring)
 31. [ ] P5.3: Implement audience.assign_segment tool (CTA suggestions tied to segment + emotion)
 32. [ ] CHECKPOINT 7: Score sample quiz + assign segment
 
