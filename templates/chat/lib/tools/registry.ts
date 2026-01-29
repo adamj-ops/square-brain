@@ -4,12 +4,16 @@
  * Central registry of all available tools.
  * Phase 4: Tool Executor + Audit Logging
  * Phase 5.1: RAG Semantic Search
+ * Pipeline 1: Guest Intelligence
  */
 
 import type { ToolDefinition } from "./types";
 import { brainUpsertItemTool } from "./implementations/brain-upsert-item";
 import { brainSearchItemsTool } from "./implementations/brain-search-items";
 import { brainSemanticSearchTool } from "./implementations/brain-semantic-search";
+import { guestsUpsertProfileTool } from "./implementations/guests-upsert-profile";
+import { guestsExtractSignalsTool } from "./implementations/guests-extract-signals";
+import { scoringScoreGuestTool } from "./implementations/scoring-score-guest";
 // Note: knowledgeIngestFirecrawlTool not registered here because it requires
 // Node.js runtime (crypto). Use the HTTP endpoint /api/internal/ingest/firecrawl instead.
 
@@ -35,6 +39,12 @@ function registerTool(tool: ToolDefinition<any, any>): void {
 registerTool(brainUpsertItemTool);
 registerTool(brainSearchItemsTool);
 registerTool(brainSemanticSearchTool);
+
+// Pipeline 1: Guest Intelligence tools
+registerTool(guestsUpsertProfileTool);
+registerTool(guestsExtractSignalsTool);
+registerTool(scoringScoreGuestTool);
+
 // knowledgeIngestFirecrawlTool requires Node.js - use HTTP endpoint instead
 
 /**
