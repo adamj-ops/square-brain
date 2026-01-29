@@ -506,7 +506,8 @@ run_iteration() {
   log_progress "$workspace" "**Session $iteration started** (model: $MODEL)"
   
   # Build cursor-agent command
-  local cmd="cursor-agent -p --force --output-format stream-json --model $MODEL"
+  # Note: unbuffer is required for PTY output - agent CLI doesn't output without it
+  local cmd="unbuffer cursor-agent -p --force --output-format stream-json --model $MODEL"
   
   if [[ -n "$session_id" ]]; then
     echo "Resuming session: $session_id" >&2

@@ -278,7 +278,7 @@ Begin by reading any relevant files, then implement the task."
   
   # Headless mode: auto-approve MCP servers to avoid interactive prompts.
   # Also detach stdin to prevent any accidental blocking on input.
-  if cd "$worktree_dir" && cursor-agent -p --approve-mcps --force --output-format stream-json --model "$MODEL" "$prompt" >> "$log_file" 2>&1 < /dev/null; then
+  if cd "$worktree_dir" && unbuffer cursor-agent -p --approve-mcps --force --output-format stream-json --model "$MODEL" "$prompt" >> "$log_file" 2>&1 < /dev/null; then
     echo "done" > "$status_file"
     
     # Check if any commits were made
