@@ -8,7 +8,7 @@ import { useChatStore } from "@/store/chat-store";
 export function ChatMain() {
   const [message, setMessage] = useState("");
   const [selectedMode, setSelectedMode] = useState("fast");
-  const [selectedModel, setSelectedModel] = useState("square-3");
+  const [selectedModel, setSelectedModel] = useState("brain-standard");
 
   const {
     chats,

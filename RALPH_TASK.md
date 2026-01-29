@@ -35,8 +35,8 @@ Complete the standalone LifeRX Brain app and implement Pipelines 1–5 for produ
 2. [x] A1.2: Remove obsolete code and validate migrations 004-006
 3. [x] A1.3: Create README.md with setup, env vars, migrations, how to run/test
 4. [x] A1.4: Create .env.local.example (NO secrets, just placeholders)
-5. [ ] A2.1: Remove Square UI branding from app
-6. [ ] A2.2: Add LifeRX Brain branding (app name, icon, favicon, metadata)
+5. [x] A2.1: Remove Square UI branding from app
+6. [x] A2.2: Add LifeRX Brain branding (app name, icon, favicon, metadata)
 7. [ ] CHECKPOINT 1: Report Phase A changes and how to test
 
 ### Phase B — Ingestion & Knowledge

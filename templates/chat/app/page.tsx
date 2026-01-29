@@ -7,8 +7,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { GridPattern } from "@/components/ui/grid-pattern";
-import { MenuIcon, Github } from "lucide-react";
-import Link from "next/link";
+import { MenuIcon } from "lucide-react";
 
 export default function ChatPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -39,29 +38,11 @@ export default function ChatPage() {
           </Button>
 
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon-sm" asChild>
-              <Link
-                href="https://github.com/ln-dev7/square-ui/tree/master/templates/chat"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <Github className="size-4" />
-              </Link>
-            </Button>
             <ThemeToggle />
           </div>
         </div>
 
         <div className="hidden md:flex absolute top-4 right-4 gap-2 z-20">
-          <Button variant="ghost" size="icon-sm" asChild>
-            <Link
-              href="https://github.com/ln-dev7/square-ui/tree/master/templates/chat"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <Github className="size-4" />
-            </Link>
-          </Button>
           <ThemeToggle />
         </div>
 

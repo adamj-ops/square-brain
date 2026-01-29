@@ -16,10 +16,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 const aiModels = [
-  { id: "square-3", label: "Square AI 3.0", icon: SparklesIcon },
-  { id: "square-turbo", label: "Square AI Turbo", icon: SparklesIcon },
-  { id: "square-pro", label: "Square AI Pro", icon: SparklesIcon },
-  { id: "square-ultra", label: "Square AI Ultra", icon: SparklesIcon },
+  { id: "brain-standard", label: "LifeRX Standard", icon: SparklesIcon },
+  { id: "brain-fast", label: "LifeRX Fast", icon: SparklesIcon },
+  { id: "brain-pro", label: "LifeRX Pro", icon: SparklesIcon },
+  { id: "brain-advanced", label: "LifeRX Advanced", icon: SparklesIcon },
 ];
 
 interface ChatInputBoxProps {

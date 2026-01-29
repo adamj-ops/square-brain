@@ -46,10 +46,10 @@ export function ChatWelcomeScreen({
 
         <div className="space-y-4 text-center">
           <h1 className="text-2xl font-semibold tracking-tight">
-            Hey! I&apos;m Square.ai
+            Hey! I&apos;m LifeRX Brain
           </h1>
           <p className="text-2xl text-foreground">
-            Tell me everything you need
+            Your intelligent knowledge assistant
           </p>
         </div>
 
@@ -84,7 +84,7 @@ export function ChatWelcomeScreen({
 
       <div className="absolute bottom-6 text-center">
         <p className="text-sm text-muted-foreground">
-          Square AI can make mistakes. Check important info.
+          LifeRX Brain can make mistakes. Check important info.
         </p>
       </div>
     </div>

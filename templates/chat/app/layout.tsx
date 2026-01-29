@@ -3,8 +3,11 @@ import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 
 export const metadata: Metadata = {
-  title: "Square AI - Chat Interface",
-  description: "A modern AI chat interface built with Next.js and shadcn/ui",
+  title: "LifeRX Brain",
+  description: "Intelligent knowledge management and AI assistant system",
+  icons: {
+    icon: "/favicon.ico",
+  },
 };
 
 export default function RootLayout({
