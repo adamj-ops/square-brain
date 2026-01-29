@@ -304,11 +304,12 @@ RETURNS TABLE (
   name TEXT,
   email TEXT,
   status TEXT,
-  overall_score NUMERIC,
+  total_score NUMERIC,
   expertise_score NUMERIC,
   reach_score NUMERIC,
-  timeliness_score NUMERIC,
-  accessibility_score NUMERIC
+  relevance_score NUMERIC,
+  availability_score NUMERIC,
+  content_potential_score NUMERIC
 )
 LANGUAGE plpgsql
 SECURITY INVOKER
@@ -321,20 +322,21 @@ BEGIN
     g.name,
     g.email,
     g.status,
-    (SELECT score FROM guest_scores WHERE guest_id = g.id AND score_type = 'overall') AS overall_score,
-    (SELECT score FROM guest_scores WHERE guest_id = g.id AND score_type = 'expertise') AS expertise_score,
-    (SELECT score FROM guest_scores WHERE guest_id = g.id AND score_type = 'reach') AS reach_score,
-    (SELECT score FROM guest_scores WHERE guest_id = g.id AND score_type = 'timeliness') AS timeliness_score,
-    (SELECT score FROM guest_scores WHERE guest_id = g.id AND score_type = 'accessibility') AS accessibility_score
+    gs.total_score,
+    gs.expertise_score,
+    gs.reach_score,
+    gs.relevance_score,
+    gs.availability_score,
+    gs.content_potential_score
   FROM guests g
+  LEFT JOIN guest_scores gs ON gs.guest_id = g.id
   WHERE g.org_id = p_org_id AND g.id = p_guest_id;
 END;
 $$;
 
--- Rank guests by score type
+-- Rank guests by total score
 CREATE OR REPLACE FUNCTION rank_guests_by_score(
   p_org_id TEXT,
-  p_score_type TEXT DEFAULT 'overall',
   p_limit INT DEFAULT 10,
   p_status_filter TEXT[] DEFAULT NULL
 )
@@ -343,8 +345,8 @@ RETURNS TABLE (
   name TEXT,
   email TEXT,
   status TEXT,
-  score NUMERIC,
-  reasoning TEXT,
+  total_score NUMERIC,
+  explanation TEXT,
   rank BIGINT
 )
 LANGUAGE plpgsql
@@ -358,14 +360,14 @@ BEGIN
     g.name,
     g.email,
     g.status,
-    gs.score,
-    gs.reasoning,
-    ROW_NUMBER() OVER (ORDER BY gs.score DESC) AS rank
+    gs.total_score,
+    gs.explanation,
+    ROW_NUMBER() OVER (ORDER BY gs.total_score DESC) AS rank
   FROM guests g
-  JOIN guest_scores gs ON gs.guest_id = g.id AND gs.score_type = p_score_type
+  JOIN guest_scores gs ON gs.guest_id = g.id
   WHERE g.org_id = p_org_id
     AND (p_status_filter IS NULL OR g.status = ANY(p_status_filter))
-  ORDER BY gs.score DESC
+  ORDER BY gs.total_score DESC
   LIMIT p_limit;
 END;
 $$;

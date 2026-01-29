@@ -3,8 +3,8 @@
 # DO NOT EDIT - regenerated on task file change
 
 source_file: RALPH_TASK.md
-source_mtime: 1769721882
-generated_at: 2026-01-29T21:24:54Z
+source_mtime: 1769722134
+generated_at: 2026-01-29T21:29:16Z
 
 tasks:
   - id: "line_34"
@@ -79,42 +79,42 @@ tasks:
     raw_marker: 10.
   - id: "line_47"
     line_number: 47
-    status: pending
+    status: completed
     parallel_group: 999999
     description: CHECKPOINT 2: Verify docs ingest + brain.semantic_search works
     indent_level: 0
     raw_marker: 11.
   - id: "line_51"
     line_number: 51
-    status: pending
+    status: completed
     parallel_group: 999999
     description: P1.1: Create tables: guests, guest_profiles, guest_signals, guest_scores (migration)
     indent_level: 0
     raw_marker: 12.
   - id: "line_52"
     line_number: 52
-    status: pending
+    status: completed
     parallel_group: 999999
     description: P1.2: Implement guests.upsert_profile tool
     indent_level: 0
     raw_marker: 13.
   - id: "line_53"
     line_number: 53
-    status: pending
+    status: completed
     parallel_group: 999999
     description: P1.3: Implement guests.extract_signals tool
     indent_level: 0
     raw_marker: 14.
   - id: "line_54"
     line_number: 54
-    status: pending
+    status: completed
     parallel_group: 999999
     description: P1.4: Implement scoring.score_guest tool (rules versioned, explainable)
     indent_level: 0
     raw_marker: 15.
   - id: "line_55"
     line_number: 55
-    status: pending
+    status: completed
     parallel_group: 999999
     description: CHECKPOINT 3: Rank 5 mock guests with explanations
     indent_level: 0
