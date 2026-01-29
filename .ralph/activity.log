@@ -281,3 +281,4 @@ Includes helper functions:
 - get_interview_themes_summary
 EOF
 )" → exit 0
+[15:31:49] 🟡 TOKENS: 50514 / 80000 (63%) [read:193KB write:0KB assist:1KB shell:0KB]

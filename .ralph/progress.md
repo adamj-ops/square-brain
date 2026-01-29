@@ -5,8 +5,8 @@
 ## Summary
 
 - Iterations completed: 1
-- Current status: Pipeline 1 Complete, Starting Pipeline 2
-- Criteria completed: 16/36
+- Current status: Pipeline 2 Complete, Starting Pipeline 3
+- Criteria completed: 21/36
 
 ## How This Works
 

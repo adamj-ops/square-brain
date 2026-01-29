@@ -60,7 +60,7 @@ Complete the standalone LifeRX Brain app and implement Pipelines 1–5 for produ
 18. [x] P2.2: Implement interviews.add_quote tool
 19. [x] P2.3: Implement themes.upsert_theme + themes.link_to_interview tools
 20. [x] P2.4: Implement theme_scanner job (auto-tag expertise, identify recurring themes)
-21. [ ] CHECKPOINT 4: Query themes + quotes across interviews
+21. [x] CHECKPOINT 4: Query themes + quotes across interviews
 
 ### Pipeline 3 — Content Repurposing
 
