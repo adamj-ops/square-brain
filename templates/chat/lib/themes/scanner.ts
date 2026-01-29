@@ -329,6 +329,118 @@ async function scanAiDocs(
 }
 
 /**
+ * Scan interviews for themes
+ * Pipeline 2: Interview Intelligence - auto-tag expertise and recurring themes
+ */
+async function scanInterviews(
+  supabase: ReturnType<typeof getServiceSupabase>,
+  input: ThemeScannerInput
+): Promise<{ items: Array<{ id: string; title: string; content_md: string }>; count: number }> {
+  let query = supabase
+    .from("interviews")
+    .select("id, title, transcript_text, summary, key_topics")
+    .eq("org_id", input.org_id)
+    .in("status", ["transcribed", "analyzed", "published"]) // Only scan interviews with content
+    .order("updated_at", { ascending: false })
+    .limit(input.limit || DEFAULT_LIMIT);
+
+  if (input.since) {
+    query = query.gt("updated_at", input.since);
+  }
+
+  // Skip already scanned unless force
+  if (!input.force) {
+    const { data: scanned } = await supabase
+      .from("interview_themes")
+      .select("interview_id")
+      .eq("org_id", input.org_id);
+
+    const scannedIds = (scanned || []).map((s) => s.interview_id);
+    if (scannedIds.length > 0) {
+      query = query.not("id", "in", `(${scannedIds.join(",")})`);
+    }
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    throw new Error(`Failed to fetch interviews: ${error.message}`);
+  }
+
+  // Transform to common format - use transcript_text or summary as content
+  const items = (data || []).map((interview) => {
+    // Build content from available fields
+    let content = "";
+    if (interview.transcript_text) {
+      content = interview.transcript_text;
+    } else if (interview.summary) {
+      content = interview.summary;
+    }
+    
+    // Append key topics if available
+    if (interview.key_topics && interview.key_topics.length > 0) {
+      content += `\n\nKey Topics: ${interview.key_topics.join(", ")}`;
+    }
+
+    return {
+      id: interview.id,
+      title: interview.title,
+      content_md: content,
+    };
+  }).filter(item => item.content_md.length > 0); // Only include interviews with content
+
+  return { items, count: items.length };
+}
+
+/**
+ * Link interview to extracted themes via interview_themes table
+ */
+async function linkInterviewToTheme(
+  supabase: ReturnType<typeof getServiceSupabase>,
+  orgId: string,
+  themeId: string,
+  interviewId: string,
+  theme: ExtractedTheme
+): Promise<boolean> {
+  // Determine discussion depth based on relevance score
+  let discussionDepth: "mentioned" | "discussed" | "deep_dive" | "expert_insight" = "discussed";
+  if (theme.relevance_score >= 0.8) {
+    discussionDepth = "deep_dive";
+  } else if (theme.relevance_score >= 0.6) {
+    discussionDepth = "discussed";
+  } else {
+    discussionDepth = "mentioned";
+  }
+
+  const { error } = await supabase.from("interview_themes").upsert(
+    {
+      org_id: orgId,
+      interview_id: interviewId,
+      theme_id: themeId,
+      relevance_score: theme.relevance_score,
+      discussion_depth: discussionDepth,
+      excerpt: theme.excerpt || null,
+      detected_by: "scanner",
+      detection_metadata: {
+        model: "gpt-4o-mini",
+        scanned_at: new Date().toISOString(),
+        category: theme.category,
+      },
+    },
+    {
+      onConflict: "interview_id,theme_id",
+    }
+  );
+
+  if (error) {
+    console.error("[theme-scanner] Failed to link interview to theme:", error);
+    return false;
+  }
+
+  return true;
+}
+
+/**
  * Run the theme scanner job
  */
 export async function runThemeScanner(
@@ -346,8 +458,8 @@ export async function runThemeScanner(
     duration_ms: 0,
   };
 
-  // Determine what to scan
-  const contentTypes = input.content_types || ["brain_item", "ai_doc"];
+  // Determine what to scan (now includes interview by default)
+  const contentTypes = input.content_types || ["brain_item", "ai_doc", "interview"];
 
   // Collect items to scan
   const itemsToScan: Array<{
@@ -374,6 +486,18 @@ export async function runThemeScanner(
     items.forEach((item) => {
       itemsToScan.push({
         type: "ai_doc",
+        id: item.id,
+        title: item.title,
+        content: item.content_md,
+      });
+    });
+  }
+
+  if (contentTypes.includes("interview")) {
+    const { items } = await scanInterviews(supabase, input);
+    items.forEach((item) => {
+      itemsToScan.push({
+        type: "interview",
         id: item.id,
         title: item.title,
         content: item.content_md,
@@ -415,15 +539,26 @@ export async function runThemeScanner(
                 result.themes_updated++;
               }
 
-              // Link content to theme
-              const linked = await linkContentToTheme(
-                supabase,
-                input.org_id,
-                themeId,
-                item.type,
-                item.id,
-                theme
-              );
+              // Link content to theme (use interview_themes for interviews)
+              let linked: boolean;
+              if (item.type === "interview") {
+                linked = await linkInterviewToTheme(
+                  supabase,
+                  input.org_id,
+                  themeId,
+                  item.id,
+                  theme
+                );
+              } else {
+                linked = await linkContentToTheme(
+                  supabase,
+                  input.org_id,
+                  themeId,
+                  item.type,
+                  item.id,
+                  theme
+                );
+              }
 
               if (linked) {
                 result.links_created++;
