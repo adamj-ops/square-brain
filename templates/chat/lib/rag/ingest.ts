@@ -23,7 +23,8 @@ export type SourceType =
   | "manual"
   | "internal_docs"
   | "firecrawl"
-  | "website";
+  | "website"
+  | "apify";
 
 export interface IngestDocumentInput {
   org_id: string;
