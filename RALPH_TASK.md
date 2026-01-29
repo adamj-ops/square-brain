@@ -44,7 +44,7 @@ Complete the standalone LifeRX Brain app and implement Pipelines 1–5 for produ
 8. [x] B1: Implement Firecrawl ingestion endpoint /api/internal/ingest/firecrawl (scrape + crawl, normalize, ingest to ai_docs + ai_chunks)
 9. [x] B2: Implement internal docs ingestion /api/internal/ingest/docs (MD/MDX, source_type=internal_docs, idempotent)
 10. [x] B3: Implement Apify ingestion seam /api/internal/ingest/apify (accept normalized payloads, allowlist)
-11. [ ] CHECKPOINT 2: Verify docs ingest + brain.semantic_search works
+11. [x] CHECKPOINT 2: Verify docs ingest + brain.semantic_search works
 
 ### Pipeline 1 — Guest Intelligence
 

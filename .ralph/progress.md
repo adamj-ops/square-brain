@@ -5,8 +5,8 @@
 ## Summary
 
 - Iterations completed: 1
-- Current status: Phase A Complete, Starting Phase B
-- Criteria completed: 7/36
+- Current status: Phase B Complete, Starting Pipeline 1
+- Criteria completed: 11/36
 
 ## How This Works
 
@@ -15,6 +15,32 @@ When context is rotated (fresh agent), the new agent reads this file.
 This is how Ralph maintains continuity across iterations.
 
 ## Session History
+
+### CHECKPOINT 2 Report - Phase B Complete
+
+**Ingestion Endpoints:**
+- `/api/internal/ingest/firecrawl` - Scrape/crawl URLs via Firecrawl
+- `/api/internal/ingest/docs` - Ingest MD/MDX files (internal_docs)
+- `/api/internal/ingest/apify` - Accept normalized payloads from Apify actors
+
+**Semantic Search:**
+- `brain.semantic_search` tool fully implemented
+- Hybrid search (vector + keyword) with fallback
+- Calls `semantic_search` and `hybrid_search` RPCs in migration 004
+
+**Testing:**
+```bash
+# Ingest docs
+curl -X POST http://localhost:3000/api/internal/ingest/docs \
+  -H "X-Internal-Secret: $SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{"action": "ingest_all", "org_id": "your-org-id"}'
+
+# Test search via tool
+# Use the chat interface or tool executor
+```
+
+---
 
 ### CHECKPOINT 1 Report - Phase A Complete
 
