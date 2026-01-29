@@ -70,10 +70,10 @@ Complete the standalone LifeRX Brain app and implement Pipelines 1–5 for produ
 
 ### Pipeline 4 — Outreach Automation (Human-in-the-Loop)
 
-25. [ ] P4.1: Create tables: outreach_sequences, outreach_messages, outreach_events (migration)
-26. [ ] P4.2: Implement outreach.compose_message tool
-27. [ ] P4.3: Implement outreach.send_email tool (Resend, requires allowWrites + approval flag)
-28. [ ] CHECKPOINT 6: Draft + approve + send test email (safe target)
+25. [x] P4.1: Create tables: outreach_sequences, outreach_messages, outreach_events (migration)
+26. [x] P4.2: Implement outreach.compose_message tool
+27. [x] P4.3: Implement outreach.send_email tool (Resend, requires allowWrites + approval flag)
+28. [x] CHECKPOINT 6: Draft + approve + send test email (safe target)
 
 ### Pipeline 5 — Audience & Quiz Segmentation
 

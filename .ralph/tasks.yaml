@@ -3,8 +3,8 @@
 # DO NOT EDIT - regenerated on task file change
 
 source_file: RALPH_TASK.md
-source_mtime: 1769722134
-generated_at: 2026-01-29T21:29:16Z
+source_mtime: 1769722391
+generated_at: 2026-01-29T21:33:50Z
 
 tasks:
   - id: "line_34"
@@ -121,56 +121,56 @@ tasks:
     raw_marker: 16.
   - id: "line_59"
     line_number: 59
-    status: pending
+    status: completed
     parallel_group: 999999
     description: P2.1: Create tables: interviews, interview_quotes, themes, interview_themes (migration)
     indent_level: 0
     raw_marker: 17.
   - id: "line_60"
     line_number: 60
-    status: pending
+    status: completed
     parallel_group: 999999
     description: P2.2: Implement interviews.add_quote tool
     indent_level: 0
     raw_marker: 18.
   - id: "line_61"
     line_number: 61
-    status: pending
+    status: completed
     parallel_group: 999999
     description: P2.3: Implement themes.upsert_theme + themes.link_to_interview tools
     indent_level: 0
     raw_marker: 19.
   - id: "line_62"
     line_number: 62
-    status: pending
+    status: completed
     parallel_group: 999999
     description: P2.4: Implement theme_scanner job (auto-tag expertise, identify recurring themes)
     indent_level: 0
     raw_marker: 20.
   - id: "line_63"
     line_number: 63
-    status: pending
+    status: completed
     parallel_group: 999999
     description: CHECKPOINT 4: Query themes + quotes across interviews
     indent_level: 0
     raw_marker: 21.
   - id: "line_67"
     line_number: 67
-    status: pending
+    status: completed
     parallel_group: 999999
     description: P3.1: Create content_assets table (migration)
     indent_level: 0
     raw_marker: 22.
   - id: "line_68"
     line_number: 68
-    status: pending
+    status: completed
     parallel_group: 999999
     description: P3.2: Implement content.generate_assets tool (quote cards, carousel outlines, shortform scripts, audio bite ideas)
     indent_level: 0
     raw_marker: 23.
   - id: "line_69"
     line_number: 69
-    status: pending
+    status: completed
     parallel_group: 999999
     description: CHECKPOINT 5: Generate content ideas from one interview
     indent_level: 0

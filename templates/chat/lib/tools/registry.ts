@@ -18,6 +18,8 @@ import { interviewsAddQuoteTool } from "./implementations/interviews-add-quote";
 import { themesUpsertThemeTool } from "./implementations/themes-upsert-theme";
 import { themesLinkToInterviewTool } from "./implementations/themes-link-to-interview";
 import { contentGenerateAssetsTool } from "./implementations/content-generate-assets";
+import { outreachComposeMessageTool } from "./implementations/outreach-compose-message";
+import { outreachSendEmailTool } from "./implementations/outreach-send-email";
 // Note: knowledgeIngestFirecrawlTool not registered here because it requires
 // Node.js runtime (crypto). Use the HTTP endpoint /api/internal/ingest/firecrawl instead.
 
@@ -56,6 +58,10 @@ registerTool(themesLinkToInterviewTool);
 
 // Pipeline 3: Content Repurposing tools
 registerTool(contentGenerateAssetsTool);
+
+// Pipeline 4: Outreach Automation tools
+registerTool(outreachComposeMessageTool);
+registerTool(outreachSendEmailTool);
 
 // knowledgeIngestFirecrawlTool requires Node.js - use HTTP endpoint instead
 

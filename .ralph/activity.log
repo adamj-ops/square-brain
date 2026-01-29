@@ -286,3 +286,9 @@ EOF
 [15:32:56] 🟡 READ /Users/adamjudeh/square-ui-1/templates/chat/lib/tools/registry.ts (89 lines, ~8.6KB)
 [15:33:02] 🟡 READ /Users/adamjudeh/square-ui-1/templates/chat/app/api/internal/jobs/theme-scanner/route.ts (151 lines, ~14.7KB)
 [15:33:10] 🟡 TOKENS: 56663 / 80000 (70%) [read:216KB write:0KB assist:1KB shell:0KB]
+[15:33:37] 🔴 READ /Users/adamjudeh/square-ui-1/templates/chat/lib/themes/scanner.ts (614 lines, ~59.9KB)
+[15:33:37] 🔴 WARN: Approaching token limit (72048 >= 70000)
+[15:33:40] 🔴 TOKENS: 72048 / 80000 (90%) - rotation imminent [read:276KB write:0KB assist:1KB shell:0KB]
+[15:33:50] 🔴 READ /Users/adamjudeh/square-ui-1/templates/chat/lib/themes/scanner.ts (626 lines, ~61.1KB)
+[15:33:50] 🔴 ROTATE: Token threshold reached (87718 >= 80000)
+[15:33:55] 🔴 ROTATE: Token threshold reached (87718 >= 80000)
