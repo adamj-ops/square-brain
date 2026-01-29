@@ -87,3 +87,22 @@ EOF
 [15:21:48] 🟡 TOKENS: 49823 / 80000 (62%) [read:189KB write:0KB assist:2KB shell:0KB]
 [15:22:08] 🟡 SHELL cd /Users/adamjudeh/square-ui-1/templates/chat && pnpm build 2>&1 → exit 0
 [15:22:20] 🟡 TOKENS: 49877 / 80000 (62%) [read:189KB write:0KB assist:2KB shell:0KB]
+[15:22:20] 🟡 SHELL cd /Users/adamjudeh/square-ui-1 && git add -A && git commit -m "$(cat <<'EOF'
+ralph: complete Phase A2 - rebrand to LifeRX Brain
+
+- A2.1: Removed all Square UI branding references:
+  - Removed GitHub links to Square UI repo
+  - Removed Square UI promotional section from sidebar
+  - Cleaned up unused imports
+
+- A2.2: Added LifeRX Brain branding:
+  - Updated metadata title and description
+  - Changed "Square AI" to "LifeRX Brain" throughout UI
+  - Updated model names (brain-standard, brain-fast, etc.)
+  - Created new brain-themed SVG logo
+  - Updated welcome screen messaging
+
+Build verified passing.
+
+EOF
+)" → exit 0
