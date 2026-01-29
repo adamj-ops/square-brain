@@ -231,7 +231,7 @@ CREATE TABLE IF NOT EXISTS quiz_responses (
   -- Assigned segment
   segment_id UUID REFERENCES audience_segments(id) ON DELETE SET NULL,
   segment_assigned_at TIMESTAMPTZ,
-  segment_confidence NUMERIC(3,2),  -- 0-1 confidence in assignment
+  segment_confidence NUMERIC(3,2) CHECK (segment_confidence >= 0 AND segment_confidence <= 1),  -- 0-1 confidence in assignment
   segment_reasoning TEXT,           -- Why this segment was assigned
   
   -- Suggested CTAs
@@ -517,29 +517,29 @@ SET search_path = public
 AS $$
 BEGIN
   RETURN QUERY
-  SELECT 
-    COUNT(*) AS total_responses,
-    COUNT(*) FILTER (WHERE status IN ('completed', 'scored', 'segmented')) AS completed_responses,
-    AVG(normalized_score) FILTER (WHERE normalized_score IS NOT NULL) AS avg_score,
-    AVG(time_spent_seconds) FILTER (WHERE time_spent_seconds IS NOT NULL) AS avg_time_seconds,
-    COALESCE(
-      jsonb_object_agg(
-        COALESCE(s.name, 'Unassigned'),
-        segment_count
-      ),
-      '{}'::jsonb
-    ) AS segment_distribution
-  FROM quiz_responses qr
-  LEFT JOIN (
-    SELECT segment_id, COUNT(*) as segment_count
+  WITH filtered_responses AS (
+    SELECT *
     FROM quiz_responses
     WHERE org_id = p_org_id
       AND (p_quiz_id IS NULL OR quiz_id = p_quiz_id)
-    GROUP BY segment_id
-  ) sc ON sc.segment_id = qr.segment_id
-  LEFT JOIN audience_segments s ON s.id = qr.segment_id
-  WHERE qr.org_id = p_org_id
-    AND (p_quiz_id IS NULL OR qr.quiz_id = p_quiz_id);
+  ),
+  segment_counts AS (
+    SELECT 
+      COALESCE(s.name, 'Unassigned') AS segment_name,
+      COUNT(*) AS segment_count
+    FROM filtered_responses fr
+    LEFT JOIN audience_segments s ON s.id = fr.segment_id
+    GROUP BY COALESCE(s.name, 'Unassigned')
+  )
+  SELECT 
+    (SELECT COUNT(*) FROM filtered_responses) AS total_responses,
+    (SELECT COUNT(*) FROM filtered_responses WHERE status IN ('completed', 'scored', 'segmented')) AS completed_responses,
+    (SELECT AVG(normalized_score) FROM filtered_responses WHERE normalized_score IS NOT NULL) AS avg_score,
+    (SELECT AVG(time_spent_seconds) FROM filtered_responses WHERE time_spent_seconds IS NOT NULL) AS avg_time_seconds,
+    COALESCE(
+      (SELECT jsonb_object_agg(segment_name, segment_count) FROM segment_counts),
+      '{}'::jsonb
+    ) AS segment_distribution;
 END;
 $$;
 
