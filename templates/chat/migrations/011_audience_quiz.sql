@@ -525,11 +525,12 @@ BEGIN
   ),
   segment_counts AS (
     SELECT 
+      fr.segment_id,
       COALESCE(s.name, 'Unassigned') AS segment_name,
       COUNT(*) AS segment_count
     FROM filtered_responses fr
     LEFT JOIN audience_segments s ON s.id = fr.segment_id
-    GROUP BY COALESCE(s.name, 'Unassigned')
+    GROUP BY fr.segment_id, s.name
   )
   SELECT 
     (SELECT COUNT(*) FROM filtered_responses) AS total_responses,
@@ -537,7 +538,10 @@ BEGIN
     (SELECT AVG(normalized_score) FROM filtered_responses WHERE normalized_score IS NOT NULL) AS avg_score,
     (SELECT AVG(time_spent_seconds) FROM filtered_responses WHERE time_spent_seconds IS NOT NULL) AS avg_time_seconds,
     COALESCE(
-      (SELECT jsonb_object_agg(segment_name, segment_count) FROM segment_counts),
+      (SELECT jsonb_object_agg(
+        COALESCE(segment_id::text, 'unassigned'),
+        jsonb_build_object('name', segment_name, 'count', segment_count)
+      ) FROM segment_counts),
       '{}'::jsonb
     ) AS segment_distribution;
 END;

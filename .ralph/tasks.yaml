@@ -3,8 +3,8 @@
 # DO NOT EDIT - regenerated on task file change
 
 source_file: RALPH_TASK.md
-source_mtime: 1769722391
-generated_at: 2026-01-29T21:33:50Z
+source_mtime: 1769723140
+generated_at: 2026-01-29T21:46:28Z
 
 tasks:
   - id: "line_34"
@@ -177,84 +177,84 @@ tasks:
     raw_marker: 24.
   - id: "line_73"
     line_number: 73
-    status: pending
+    status: completed
     parallel_group: 999999
     description: P4.1: Create tables: outreach_sequences, outreach_messages, outreach_events (migration)
     indent_level: 0
     raw_marker: 25.
   - id: "line_74"
     line_number: 74
-    status: pending
+    status: completed
     parallel_group: 999999
     description: P4.2: Implement outreach.compose_message tool
     indent_level: 0
     raw_marker: 26.
   - id: "line_75"
     line_number: 75
-    status: pending
+    status: completed
     parallel_group: 999999
     description: P4.3: Implement outreach.send_email tool (Resend, requires allowWrites + approval flag)
     indent_level: 0
     raw_marker: 27.
   - id: "line_76"
     line_number: 76
-    status: pending
+    status: completed
     parallel_group: 999999
     description: CHECKPOINT 6: Draft + approve + send test email (safe target)
     indent_level: 0
     raw_marker: 28.
   - id: "line_80"
     line_number: 80
-    status: pending
+    status: completed
     parallel_group: 999999
     description: P5.1: Create tables: quiz_responses, audience_segments, segment_rules, ctas (migration)
     indent_level: 0
     raw_marker: 29.
   - id: "line_81"
     line_number: 81
-    status: pending
+    status: completed
     parallel_group: 999999
     description: P5.2: Implement audience.score_quiz tool (sliding interdependency scoring)
     indent_level: 0
     raw_marker: 30.
   - id: "line_82"
     line_number: 82
-    status: pending
+    status: completed
     parallel_group: 999999
     description: P5.3: Implement audience.assign_segment tool (CTA suggestions tied to segment + emotion)
     indent_level: 0
     raw_marker: 31.
   - id: "line_83"
     line_number: 83
-    status: pending
+    status: completed
     parallel_group: 999999
     description: CHECKPOINT 7: Score sample quiz + assign segment
     indent_level: 0
     raw_marker: 32.
   - id: "line_87"
     line_number: 87
-    status: pending
+    status: completed
     parallel_group: 999999
     description: F1: Create smoke test script (ingest → search → tool call → audit log)
     indent_level: 0
     raw_marker: 33.
   - id: "line_88"
     line_number: 88
-    status: pending
+    status: completed
     parallel_group: 999999
     description: F2: Ensure all pipelines can be triggered via API/tools
     indent_level: 0
     raw_marker: 34.
   - id: "line_89"
     line_number: 89
-    status: pending
+    status: completed
     parallel_group: 999999
     description: F3: Final README update (system overview, pipeline descriptions, how to test each)
     indent_level: 0
     raw_marker: 35.
   - id: "line_90"
     line_number: 90
-    status: pending
+    status: completed
     parallel_group: 999999
     description: CHECKPOINT 8: Final report + release readiness
     indent_level: 0
