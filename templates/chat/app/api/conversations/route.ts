@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase/client";
+import { createApiError, getErrorMessage } from "@/lib/api/errors";
 
 const DEFAULT_ORG_ID = process.env.DEFAULT_ORG_ID!;
 
@@ -8,19 +9,40 @@ const DEFAULT_ORG_ID = process.env.DEFAULT_ORG_ID!;
  * List all conversations for the org
  */
 export async function GET() {
-  const supabase = createServerClient();
+  try {
+    if (!DEFAULT_ORG_ID) {
+      return createApiError(
+        "CONFIGURATION_ERROR",
+        "DEFAULT_ORG_ID not configured",
+        { field: "DEFAULT_ORG_ID" }
+      );
+    }
 
-  const { data, error } = await supabase
-    .from("conversations")
-    .select("*")
-    .eq("org_id", DEFAULT_ORG_ID)
-    .order("created_at", { ascending: false });
+    const supabase = createServerClient();
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    const { data, error } = await supabase
+      .from("conversations")
+      .select("*")
+      .eq("org_id", DEFAULT_ORG_ID)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      return createApiError(
+        "INTERNAL_ERROR",
+        "Failed to fetch conversations",
+        { dbError: error.message }
+      );
+    }
+
+    return NextResponse.json({ conversations: data });
+  } catch (error) {
+    console.error("[conversations] GET error:", error);
+    return createApiError(
+      "INTERNAL_ERROR",
+      "An unexpected error occurred while fetching conversations",
+      { originalError: getErrorMessage(error) }
+    );
   }
-
-  return NextResponse.json({ conversations: data });
 }
 
 /**
@@ -29,28 +51,49 @@ export async function GET() {
  * Body: { title?: string }
  */
 export async function POST(req: NextRequest) {
-  const supabase = createServerClient();
-
-  let title = "New Conversation";
   try {
-    const body = await req.json();
-    if (body.title) title = body.title;
-  } catch {
-    // No body or invalid JSON is fine
+    if (!DEFAULT_ORG_ID) {
+      return createApiError(
+        "CONFIGURATION_ERROR",
+        "DEFAULT_ORG_ID not configured",
+        { field: "DEFAULT_ORG_ID" }
+      );
+    }
+
+    const supabase = createServerClient();
+
+    let title = "New Conversation";
+    try {
+      const body = await req.json();
+      if (body.title) title = body.title;
+    } catch {
+      // No body or invalid JSON is fine - use default title
+    }
+
+    const { data, error } = await supabase
+      .from("conversations")
+      .insert({
+        org_id: DEFAULT_ORG_ID,
+        title,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      return createApiError(
+        "INTERNAL_ERROR",
+        "Failed to create conversation",
+        { dbError: error.message }
+      );
+    }
+
+    return NextResponse.json({ conversation: data }, { status: 201 });
+  } catch (error) {
+    console.error("[conversations] POST error:", error);
+    return createApiError(
+      "INTERNAL_ERROR",
+      "An unexpected error occurred while creating conversation",
+      { originalError: getErrorMessage(error) }
+    );
   }
-
-  const { data, error } = await supabase
-    .from("conversations")
-    .insert({
-      org_id: DEFAULT_ORG_ID,
-      title,
-    })
-    .select()
-    .single();
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-
-  return NextResponse.json({ conversation: data }, { status: 201 });
 }

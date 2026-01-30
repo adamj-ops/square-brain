@@ -11,6 +11,7 @@ import type { NextRequest } from "next/server";
 import { getServiceSupabase } from "@/lib/supabase/server";
 import { chunkMarkdown, type Chunk } from "@/lib/rag/chunker";
 import { getEmbedder } from "@/lib/rag/embedder";
+import { createApiErrorResponse, getErrorMessage } from "@/lib/api/errors";
 
 const INTERNAL_SECRET = process.env.INTERNAL_SHARED_SECRET;
 const BATCH_SIZE = 5; // Process 5 docs at a time
@@ -29,31 +30,32 @@ function verifySecret(req: NextRequest): boolean {
 }
 
 export async function POST(req: NextRequest) {
-  // Verify internal secret
-  if (!verifySecret(req)) {
-    return new Response(JSON.stringify({ error: "Unauthorized" }), {
-      status: 401,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
-
-  let body: {
-    limit?: number;
-    source_type?: string;
-  };
-
   try {
-    body = await req.json();
-  } catch {
-    body = {};
-  }
+    // Verify internal secret
+    if (!verifySecret(req)) {
+      return createApiErrorResponse(
+        "UNAUTHORIZED",
+        "Invalid or missing X-Internal-Secret header",
+        { header: "X-Internal-Secret" }
+      );
+    }
 
-  const limit = body.limit || BATCH_SIZE;
-  const sourceTypeFilter = body.source_type;
+    let body: {
+      limit?: number;
+      source_type?: string;
+    };
 
-  const supabase = getServiceSupabase();
+    try {
+      body = await req.json();
+    } catch {
+      body = {};
+    }
 
-  try {
+    const limit = body.limit || BATCH_SIZE;
+    const sourceTypeFilter = body.source_type;
+
+    const supabase = getServiceSupabase();
+
     // Fetch pending docs
     let query = supabase
       .from("ai_docs")
@@ -68,7 +70,11 @@ export async function POST(req: NextRequest) {
     const { data: pendingDocs, error: fetchError } = await query;
 
     if (fetchError) {
-      throw new Error(`Failed to fetch pending docs: ${fetchError.message}`);
+      return createApiErrorResponse(
+        "INTERNAL_ERROR",
+        "Failed to fetch pending docs",
+        { dbError: fetchError.message }
+      );
     }
 
     if (!pendingDocs || pendingDocs.length === 0) {
@@ -182,8 +188,7 @@ export async function POST(req: NextRequest) {
           .update({
             processing_status: "failed",
             metadata: {
-              error:
-                docError instanceof Error ? docError.message : "Unknown error",
+              error: getErrorMessage(docError),
             },
           })
           .eq("id", doc.id);
@@ -193,7 +198,7 @@ export async function POST(req: NextRequest) {
           title: doc.title,
           chunk_count: 0,
           status: "failed",
-          error: docError instanceof Error ? docError.message : "Unknown error",
+          error: getErrorMessage(docError),
         });
       }
     }
@@ -214,12 +219,10 @@ export async function POST(req: NextRequest) {
     );
   } catch (error) {
     console.error("[rag/process-pending] Error:", error);
-    return new Response(
-      JSON.stringify({
-        error: "Processing failed",
-        message: error instanceof Error ? error.message : "Unknown error",
-      }),
-      { status: 500, headers: { "Content-Type": "application/json" } }
+    return createApiErrorResponse(
+      "INTERNAL_ERROR",
+      "Processing failed",
+      { originalError: getErrorMessage(error) }
     );
   }
 }
@@ -228,32 +231,42 @@ export async function POST(req: NextRequest) {
  * GET handler - check pending count
  */
 export async function GET(_req: NextRequest) {
-  const supabase = getServiceSupabase();
+  try {
+    const supabase = getServiceSupabase();
 
-  const { data, error } = await supabase
-    .from("ai_docs")
-    .select("processing_status")
-    .in("processing_status", ["pending", "processing", "failed"]);
+    const { data, error } = await supabase
+      .from("ai_docs")
+      .select("processing_status")
+      .in("processing_status", ["pending", "processing", "failed"]);
 
-  if (error) {
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
-      headers: { "Content-Type": "application/json" },
-    });
+    if (error) {
+      return createApiErrorResponse(
+        "INTERNAL_ERROR",
+        "Failed to fetch pending counts",
+        { dbError: error.message }
+      );
+    }
+
+    const counts = {
+      pending: data?.filter((d) => d.processing_status === "pending").length || 0,
+      processing:
+        data?.filter((d) => d.processing_status === "processing").length || 0,
+      failed: data?.filter((d) => d.processing_status === "failed").length || 0,
+    };
+
+    return new Response(
+      JSON.stringify({
+        status: "ok",
+        counts,
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } }
+    );
+  } catch (error) {
+    console.error("[rag/process-pending] GET error:", error);
+    return createApiErrorResponse(
+      "INTERNAL_ERROR",
+      "Failed to get pending counts",
+      { originalError: getErrorMessage(error) }
+    );
   }
-
-  const counts = {
-    pending: data?.filter((d) => d.processing_status === "pending").length || 0,
-    processing:
-      data?.filter((d) => d.processing_status === "processing").length || 0,
-    failed: data?.filter((d) => d.processing_status === "failed").length || 0,
-  };
-
-  return new Response(
-    JSON.stringify({
-      status: "ok",
-      counts,
-    }),
-    { status: 200, headers: { "Content-Type": "application/json" } }
-  );
 }

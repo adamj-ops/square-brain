@@ -13,6 +13,11 @@ import {
   FIRECRAWL_INGEST_LIMITS,
   type FirecrawlIngestInput,
 } from "@/lib/firecrawl/ingest";
+import {
+  createApiErrorResponse,
+  getErrorMessage,
+  isValidationError,
+} from "@/lib/api/errors";
 
 // Force Node.js runtime (crypto module required for content hashing)
 export const runtime = "nodejs";
@@ -33,69 +38,59 @@ function verifySecret(req: NextRequest): boolean {
 }
 
 export async function POST(req: NextRequest) {
-  // Verify internal secret
-  if (!verifySecret(req)) {
-    return new Response(JSON.stringify({ error: "Unauthorized" }), {
-      status: 401,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
-
-  let body: FirecrawlIngestInput;
-
   try {
-    body = await req.json();
-  } catch {
-    return new Response(JSON.stringify({ error: "Invalid JSON body" }), {
-      status: 400,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
+    // Verify internal secret
+    if (!verifySecret(req)) {
+      return createApiErrorResponse(
+        "UNAUTHORIZED",
+        "Invalid or missing X-Internal-Secret header",
+        { header: "X-Internal-Secret" }
+      );
+    }
 
-  try {
+    let body: FirecrawlIngestInput;
+
+    try {
+      body = await req.json();
+    } catch {
+      return createApiErrorResponse(
+        "BAD_REQUEST",
+        "Invalid JSON body",
+        { expected: "FirecrawlIngestInput" }
+      );
+    }
+
     const result = await ingestFromFirecrawl(body);
     return new Response(JSON.stringify(result), {
       status: 200,
       headers: { "Content-Type": "application/json" },
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown error";
+    const message = getErrorMessage(error);
 
-    // Check if it's a validation error (400) or Firecrawl error (502)
-    if (
-      message.includes("must be") ||
-      message.includes("Invalid") ||
-      message.includes("required")
-    ) {
-      return new Response(JSON.stringify({ error: message }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      });
+    // Check if it's a validation error (400)
+    if (isValidationError(message)) {
+      return createApiErrorResponse(
+        "VALIDATION_ERROR",
+        message,
+        { source: "input_validation" }
+      );
     }
 
+    // Check if it's a Firecrawl upstream error (502)
     if (message.includes("Firecrawl")) {
-      return new Response(
-        JSON.stringify({
-          error: "Upstream service error",
-          message,
-        }),
-        {
-          status: 502,
-          headers: { "Content-Type": "application/json" },
-        }
+      return createApiErrorResponse(
+        "UPSTREAM_ERROR",
+        "Upstream service error",
+        { originalError: message, service: "firecrawl" }
       );
     }
 
     console.error("[firecrawl/ingest] Error:", error);
-    return new Response(
-      JSON.stringify({
-        error: "Ingestion failed",
-        message,
-      }),
-      {
-        status: 500,
-        headers: { "Content-Type": "application/json" },
-      }
+    return createApiErrorResponse(
+      "INTERNAL_ERROR",
+      "Ingestion failed",
+      { originalError: message }
     );
   }
 }
@@ -104,14 +99,23 @@ export async function POST(req: NextRequest) {
  * GET - Health check / info
  */
 export async function GET() {
-  return new Response(
-    JSON.stringify({
-      service: "firecrawl-ingest",
-      limits: FIRECRAWL_INGEST_LIMITS,
-    }),
-    {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
-    }
-  );
+  try {
+    return new Response(
+      JSON.stringify({
+        service: "firecrawl-ingest",
+        limits: FIRECRAWL_INGEST_LIMITS,
+      }),
+      {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }
+    );
+  } catch (error) {
+    console.error("[firecrawl/ingest] GET error:", error);
+    return createApiErrorResponse(
+      "INTERNAL_ERROR",
+      "Failed to get service info",
+      { originalError: getErrorMessage(error) }
+    );
+  }
 }

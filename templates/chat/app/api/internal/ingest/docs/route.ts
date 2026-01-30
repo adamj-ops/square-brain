@@ -13,6 +13,7 @@
 import type { NextRequest } from "next/server";
 import { ingestInternalDocs, readDocsDirectory } from "@/lib/rag/ingest-docs";
 import { ingestDocument } from "@/lib/rag/ingest";
+import { createApiErrorResponse, getErrorMessage } from "@/lib/api/errors";
 
 // Force Node.js runtime (file system and crypto required)
 export const runtime = "nodejs";
@@ -60,28 +61,30 @@ interface DocsIngestInput {
 }
 
 export async function POST(req: NextRequest) {
-  // Verify internal secret
-  if (!verifySecret(req)) {
-    return new Response(JSON.stringify({ error: "Unauthorized" }), {
-      status: 401,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
-
-  let body: DocsIngestInput;
-
   try {
-    body = await req.json();
-  } catch {
-    return new Response(JSON.stringify({ error: "Invalid JSON body" }), {
-      status: 400,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
+    // Verify internal secret
+    if (!verifySecret(req)) {
+      return createApiErrorResponse(
+        "UNAUTHORIZED",
+        "Invalid or missing X-Internal-Secret header",
+        { header: "X-Internal-Secret" }
+      );
+    }
 
-  const orgId = body.org_id || DEFAULT_ORG_ID;
+    let body: DocsIngestInput;
 
-  try {
+    try {
+      body = await req.json();
+    } catch {
+      return createApiErrorResponse(
+        "BAD_REQUEST",
+        "Invalid JSON body",
+        { expected: "{ action, document?, org_id?, tags? }" }
+      );
+    }
+
+    const orgId = body.org_id || DEFAULT_ORG_ID;
+
     if (body.action === "ingest_all") {
       // Ingest all docs from the docs/ directory
       const result = await ingestInternalDocs(orgId);
@@ -98,22 +101,20 @@ export async function POST(req: NextRequest) {
 
     if (body.action === "ingest_single") {
       if (!body.document) {
-        return new Response(
-          JSON.stringify({
-            error: "document is required for ingest_single action",
-          }),
-          { status: 400, headers: { "Content-Type": "application/json" } }
+        return createApiErrorResponse(
+          "VALIDATION_ERROR",
+          "document is required for ingest_single action",
+          { field: "document" }
         );
       }
 
       const { filename, title, content, metadata } = body.document;
 
       if (!filename || !content) {
-        return new Response(
-          JSON.stringify({
-            error: "document.filename and document.content are required",
-          }),
-          { status: 400, headers: { "Content-Type": "application/json" } }
+        return createApiErrorResponse(
+          "VALIDATION_ERROR",
+          "document.filename and document.content are required",
+          { missing: [!filename && "filename", !content && "content"].filter(Boolean) }
         );
       }
 
@@ -142,20 +143,17 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    return new Response(
-      JSON.stringify({
-        error: "Invalid action. Must be: ingest_all or ingest_single",
-      }),
-      { status: 400, headers: { "Content-Type": "application/json" } }
+    return createApiErrorResponse(
+      "VALIDATION_ERROR",
+      "Invalid action. Must be: ingest_all or ingest_single",
+      { field: "action", allowed: ["ingest_all", "ingest_single"] }
     );
   } catch (error) {
     console.error("[docs/ingest] Error:", error);
-    return new Response(
-      JSON.stringify({
-        error: "Ingestion failed",
-        message: error instanceof Error ? error.message : "Unknown error",
-      }),
-      { status: 500, headers: { "Content-Type": "application/json" } }
+    return createApiErrorResponse(
+      "INTERNAL_ERROR",
+      "Ingestion failed",
+      { originalError: getErrorMessage(error) }
     );
   }
 }
@@ -180,7 +178,9 @@ export async function GET() {
       }),
       { status: 200, headers: { "Content-Type": "application/json" } }
     );
-  } catch {
+  } catch (error) {
+    console.error("[docs/ingest] GET error:", error);
+    // Return partial info even on error, but with structured note
     return new Response(
       JSON.stringify({
         service: "docs-ingest",
@@ -188,6 +188,7 @@ export async function GET() {
         available_docs: [],
         actions: ["ingest_all", "ingest_single"],
         note: "Could not read docs directory",
+        error: { code: "INTERNAL_ERROR", message: getErrorMessage(error) },
       }),
       { status: 200, headers: { "Content-Type": "application/json" } }
     );

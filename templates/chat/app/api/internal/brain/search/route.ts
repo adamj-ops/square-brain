@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServiceSupabase } from "@/lib/supabase/server";
 import { isValidBrainItemType } from "@/lib/brain/items/validate";
 import type { BrainItemSearchResult } from "@/lib/brain/items/types";
+import { createApiError, getErrorMessage } from "@/lib/api/errors";
 
 const INTERNAL_SECRET = process.env.INTERNAL_SHARED_SECRET;
 const DEFAULT_ORG_ID = process.env.DEFAULT_ORG_ID;
@@ -24,53 +25,62 @@ const EXCERPT_LENGTH = 200;
  * Auth: X-Internal-Secret header must match INTERNAL_SHARED_SECRET
  */
 export async function GET(req: NextRequest): Promise<NextResponse> {
-  // Verify internal secret
-  const secret = req.headers.get("X-Internal-Secret");
-  if (!INTERNAL_SECRET || secret !== INTERNAL_SECRET) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  if (!DEFAULT_ORG_ID) {
-    return NextResponse.json({ error: "DEFAULT_ORG_ID not configured" }, { status: 500 });
-  }
-
-  const { searchParams } = new URL(req.url);
-  
-  // Parse query params
-  const query = searchParams.get("query")?.trim() || undefined;
-  const type = searchParams.get("type") || undefined;
-  const tag = searchParams.get("tag")?.trim().toLowerCase() || undefined;
-  const limitStr = searchParams.get("limit");
-  const offsetStr = searchParams.get("offset");
-
-  // Validate type if provided
-  if (type && !isValidBrainItemType(type)) {
-    return NextResponse.json(
-      { error: `Invalid type. Must be one of: decision, sop, principle, playbook` },
-      { status: 400 }
-    );
-  }
-
-  // Parse limit/offset
-  let limit = DEFAULT_LIMIT;
-  if (limitStr) {
-    const parsed = parseInt(limitStr, 10);
-    if (!isNaN(parsed) && parsed > 0) {
-      limit = Math.min(parsed, MAX_LIMIT);
-    }
-  }
-
-  let offset = 0;
-  if (offsetStr) {
-    const parsed = parseInt(offsetStr, 10);
-    if (!isNaN(parsed) && parsed >= 0) {
-      offset = parsed;
-    }
-  }
-
-  const supabase = getServiceSupabase();
-
   try {
+    // Verify internal secret
+    const secret = req.headers.get("X-Internal-Secret");
+    if (!INTERNAL_SECRET || secret !== INTERNAL_SECRET) {
+      return createApiError(
+        "UNAUTHORIZED",
+        "Invalid or missing X-Internal-Secret header",
+        { header: "X-Internal-Secret" }
+      );
+    }
+
+    if (!DEFAULT_ORG_ID) {
+      return createApiError(
+        "CONFIGURATION_ERROR",
+        "DEFAULT_ORG_ID not configured",
+        { field: "DEFAULT_ORG_ID" }
+      );
+    }
+
+    const { searchParams } = new URL(req.url);
+    
+    // Parse query params
+    const query = searchParams.get("query")?.trim() || undefined;
+    const type = searchParams.get("type") || undefined;
+    const tag = searchParams.get("tag")?.trim().toLowerCase() || undefined;
+    const limitStr = searchParams.get("limit");
+    const offsetStr = searchParams.get("offset");
+
+    // Validate type if provided
+    if (type && !isValidBrainItemType(type)) {
+      return createApiError(
+        "VALIDATION_ERROR",
+        "Invalid type. Must be one of: decision, sop, principle, playbook",
+        { field: "type", value: type, allowed: ["decision", "sop", "principle", "playbook"] }
+      );
+    }
+
+    // Parse limit/offset
+    let limit = DEFAULT_LIMIT;
+    if (limitStr) {
+      const parsed = parseInt(limitStr, 10);
+      if (!isNaN(parsed) && parsed > 0) {
+        limit = Math.min(parsed, MAX_LIMIT);
+      }
+    }
+
+    let offset = 0;
+    if (offsetStr) {
+      const parsed = parseInt(offsetStr, 10);
+      if (!isNaN(parsed) && parsed >= 0) {
+        offset = parsed;
+      }
+    }
+
+    const supabase = getServiceSupabase();
+
     // Build query
     let dbQuery = supabase
       .from("brain_items")
@@ -99,7 +109,11 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const { data, error } = await dbQuery;
 
     if (error) {
-      throw new Error(`Search failed: ${error.message}`);
+      return createApiError(
+        "INTERNAL_ERROR",
+        "Search failed",
+        { dbError: error.message }
+      );
     }
 
     // Transform results with excerpts
@@ -115,10 +129,11 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
     return NextResponse.json({ items }, { status: 200 });
   } catch (err) {
-    console.error("Brain search error:", err);
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Database error" },
-      { status: 500 }
+    console.error("[brain/search] Error:", err);
+    return createApiError(
+      "INTERNAL_ERROR",
+      "An unexpected error occurred during search",
+      { originalError: getErrorMessage(err) }
     );
   }
 }

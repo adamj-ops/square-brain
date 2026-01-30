@@ -233,61 +233,82 @@ export async function POST(req: NextRequest) {
     }
   };
 
-  log("info", "Request started", { path: "/api/assistant/run" });
-
-  // Parse request
-  let body: AssistantRunRequest;
-  try {
-    body = await req.json();
-  } catch {
-    log("warn", "Invalid JSON body");
-    return new Response(JSON.stringify({ error: "Invalid JSON body" }), {
-      status: 400,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
-
-  const { messages, context } = body;
-
-  if (!messages || !Array.isArray(messages)) {
-    log("warn", "Missing messages array");
-    return new Response(JSON.stringify({ error: "messages array is required" }), {
-      status: 400,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
-
-  const apiKey = process.env.OPENAI_API_KEY;
-  const model = process.env.OPENAI_MODEL || "gpt-4o";
-
-  if (!apiKey) {
-    log("error", "OPENAI_API_KEY not configured");
-    return new Response(JSON.stringify({ error: "OPENAI_API_KEY not configured" }), {
-      status: 500,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
-
-  // Build tool context with session_id for tracing
-  const toolCtx: ToolContext = {
-    org_id: context?.org_id || DEFAULT_ORG_ID,
-    session_id: sessionId, // Always use our generated session_id for consistency
-    user_id: context?.user_id,
-    allowWrites: context?.allowWrites ?? false,
-    metadata: {
-      source: "assistant-run",
-      request_session_id: sessionId,
-      client_session_id: context?.session_id, // Preserve client's session_id if provided
-    },
+  /**
+   * Create a structured error response for early validation failures
+   */
+  const createErrorResponse = (
+    code: string,
+    message: string,
+    details?: unknown,
+    status = 400
+  ) => {
+    return new Response(
+      JSON.stringify({ code, message, details }),
+      { status, headers: { "Content-Type": "application/json" } }
+    );
   };
 
-  if (!toolCtx.org_id) {
-    log("warn", "Missing org_id");
-    return new Response(
-      JSON.stringify({ error: "org_id required (set DEFAULT_ORG_ID or pass in context)" }),
-      { status: 400, headers: { "Content-Type": "application/json" } }
-    );
-  }
+  try {
+    log("info", "Request started", { path: "/api/assistant/run" });
+
+    // Parse request
+    let body: AssistantRunRequest;
+    try {
+      body = await req.json();
+    } catch {
+      log("warn", "Invalid JSON body");
+      return createErrorResponse(
+        "BAD_REQUEST",
+        "Invalid JSON body",
+        { expected: "{ messages, context? }" }
+      );
+    }
+
+    const { messages, context } = body;
+
+    if (!messages || !Array.isArray(messages)) {
+      log("warn", "Missing messages array");
+      return createErrorResponse(
+        "VALIDATION_ERROR",
+        "messages array is required",
+        { field: "messages" }
+      );
+    }
+
+    const apiKey = process.env.OPENAI_API_KEY;
+    const model = process.env.OPENAI_MODEL || "gpt-4o";
+
+    if (!apiKey) {
+      log("error", "OPENAI_API_KEY not configured");
+      return createErrorResponse(
+        "CONFIGURATION_ERROR",
+        "OPENAI_API_KEY not configured",
+        { field: "OPENAI_API_KEY" },
+        500
+      );
+    }
+
+    // Build tool context with session_id for tracing
+    const toolCtx: ToolContext = {
+      org_id: context?.org_id || DEFAULT_ORG_ID,
+      session_id: sessionId, // Always use our generated session_id for consistency
+      user_id: context?.user_id,
+      allowWrites: context?.allowWrites ?? false,
+      metadata: {
+        source: "assistant-run",
+        request_session_id: sessionId,
+        client_session_id: context?.session_id, // Preserve client's session_id if provided
+      },
+    };
+
+    if (!toolCtx.org_id) {
+      log("warn", "Missing org_id");
+      return createErrorResponse(
+        "VALIDATION_ERROR",
+        "org_id required (set DEFAULT_ORG_ID or pass in context)",
+        { field: "org_id" }
+      );
+    }
 
   log("info", "Request validated", {
     org_id: toolCtx.org_id,
@@ -794,14 +815,27 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  return new Response(readableStream, {
-    headers: {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache, no-transform",
-      Connection: "keep-alive",
-      "X-Session-Id": sessionId, // Request tracing
-    },
-  });
+    return new Response(readableStream, {
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache, no-transform",
+        Connection: "keep-alive",
+        "X-Session-Id": sessionId, // Request tracing
+      },
+    });
+  } catch (error) {
+    // Outer catch for unexpected errors during setup
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    console.error("[assistant/run] Unexpected error:", error);
+    return new Response(
+      JSON.stringify({
+        code: "INTERNAL_ERROR",
+        message: "An unexpected error occurred",
+        details: { originalError: errorMessage },
+      }),
+      { status: 500, headers: { "Content-Type": "application/json" } }
+    );
+  }
 }
 
 /**

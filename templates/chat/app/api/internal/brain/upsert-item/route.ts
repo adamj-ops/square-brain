@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServiceSupabase } from "@/lib/supabase/server";
 import { validateBrainItemInput } from "@/lib/brain/items/validate";
 import type { UpsertResult } from "@/lib/brain/items/types";
+import { createApiError, getErrorMessage } from "@/lib/api/errors";
 
 const INTERNAL_SECRET = process.env.INTERNAL_SHARED_SECRET;
 const DEFAULT_ORG_ID = process.env.DEFAULT_ORG_ID;
@@ -16,36 +17,52 @@ const DEFAULT_ORG_ID = process.env.DEFAULT_ORG_ID;
  * Auth: X-Internal-Secret header must match INTERNAL_SHARED_SECRET
  */
 export async function POST(req: NextRequest): Promise<NextResponse> {
-  // Verify internal secret
-  const secret = req.headers.get("X-Internal-Secret");
-  if (!INTERNAL_SECRET || secret !== INTERNAL_SECRET) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  if (!DEFAULT_ORG_ID) {
-    return NextResponse.json({ error: "DEFAULT_ORG_ID not configured" }, { status: 500 });
-  }
-
-  // Parse body
-  let body: unknown;
   try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
-  }
+    // Verify internal secret
+    const secret = req.headers.get("X-Internal-Secret");
+    if (!INTERNAL_SECRET || secret !== INTERNAL_SECRET) {
+      return createApiError(
+        "UNAUTHORIZED",
+        "Invalid or missing X-Internal-Secret header",
+        { header: "X-Internal-Secret" }
+      );
+    }
 
-  // Validate input
-  const validation = validateBrainItemInput(body);
-  if (!validation.valid || !validation.data) {
-    return NextResponse.json({ error: "Validation failed", details: validation.errors }, { status: 400 });
-  }
+    if (!DEFAULT_ORG_ID) {
+      return createApiError(
+        "CONFIGURATION_ERROR",
+        "DEFAULT_ORG_ID not configured",
+        { field: "DEFAULT_ORG_ID" }
+      );
+    }
 
-  const input = validation.data;
-  const orgId = input.org_id || DEFAULT_ORG_ID;
+    // Parse body
+    let body: unknown;
+    try {
+      body = await req.json();
+    } catch {
+      return createApiError(
+        "BAD_REQUEST",
+        "Invalid JSON body",
+        { expected: "{ type, title, content_md, ... }" }
+      );
+    }
 
-  const supabase = getServiceSupabase();
+    // Validate input
+    const validation = validateBrainItemInput(body);
+    if (!validation.valid || !validation.data) {
+      return createApiError(
+        "VALIDATION_ERROR",
+        "Validation failed",
+        { errors: validation.errors }
+      );
+    }
 
-  try {
+    const input = validation.data;
+    const orgId = input.org_id || DEFAULT_ORG_ID;
+
+    const supabase = getServiceSupabase();
+
     let result: UpsertResult;
 
     if (input.canonical_key) {
@@ -58,10 +75,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
     return NextResponse.json(result, { status: 200 });
   } catch (err) {
-    console.error("Brain item upsert error:", err);
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Database error" },
-      { status: 500 }
+    console.error("[brain/upsert-item] Error:", err);
+    return createApiError(
+      "INTERNAL_ERROR",
+      "Failed to upsert brain item",
+      { originalError: getErrorMessage(err) }
     );
   }
 }

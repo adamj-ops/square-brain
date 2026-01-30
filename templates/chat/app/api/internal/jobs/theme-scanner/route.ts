@@ -15,6 +15,7 @@
 import type { NextRequest } from "next/server";
 import { runThemeScanner, getThemesWithEvidence } from "@/lib/themes";
 import type { ThemeScannerInput, ContentType } from "@/lib/themes/types";
+import { createApiErrorResponse, getErrorMessage } from "@/lib/api/errors";
 
 const INTERNAL_SECRET = process.env.INTERNAL_SHARED_SECRET;
 const DEFAULT_ORG_ID = process.env.DEFAULT_ORG_ID;
@@ -36,42 +37,44 @@ function verifySecret(req: NextRequest): boolean {
  * POST handler - trigger theme scanner
  */
 export async function POST(req: NextRequest) {
-  // Verify internal secret
-  if (!verifySecret(req)) {
-    return new Response(JSON.stringify({ error: "Unauthorized" }), {
-      status: 401,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
-
-  let body: {
-    action?: "scan" | "list_themes";
-    org_id?: string;
-    content_types?: ContentType[];
-    since?: string;
-    limit?: number;
-    force?: boolean;
-    category?: string;
-  };
-
   try {
-    body = await req.json();
-  } catch {
-    // Default to scan action with empty body
-    body = {};
-  }
+    // Verify internal secret
+    if (!verifySecret(req)) {
+      return createApiErrorResponse(
+        "UNAUTHORIZED",
+        "Invalid or missing X-Internal-Secret header",
+        { header: "X-Internal-Secret" }
+      );
+    }
 
-  const action = body.action || "scan";
-  const orgId = body.org_id || DEFAULT_ORG_ID;
+    let body: {
+      action?: "scan" | "list_themes";
+      org_id?: string;
+      content_types?: ContentType[];
+      since?: string;
+      limit?: number;
+      force?: boolean;
+      category?: string;
+    };
 
-  if (!orgId) {
-    return new Response(
-      JSON.stringify({ error: "org_id is required (or set DEFAULT_ORG_ID)" }),
-      { status: 400, headers: { "Content-Type": "application/json" } }
-    );
-  }
+    try {
+      body = await req.json();
+    } catch {
+      // Default to scan action with empty body
+      body = {};
+    }
 
-  try {
+    const action = body.action || "scan";
+    const orgId = body.org_id || DEFAULT_ORG_ID;
+
+    if (!orgId) {
+      return createApiErrorResponse(
+        "VALIDATION_ERROR",
+        "org_id is required (or set DEFAULT_ORG_ID)",
+        { field: "org_id" }
+      );
+    }
+
     switch (action) {
       case "scan": {
         const input: ThemeScannerInput = {
@@ -113,19 +116,18 @@ export async function POST(req: NextRequest) {
       }
 
       default:
-        return new Response(
-          JSON.stringify({ error: "Invalid action. Must be: scan or list_themes" }),
-          { status: 400, headers: { "Content-Type": "application/json" } }
+        return createApiErrorResponse(
+          "VALIDATION_ERROR",
+          "Invalid action. Must be: scan or list_themes",
+          { field: "action", allowed: ["scan", "list_themes"] }
         );
     }
   } catch (error) {
     console.error("[theme-scanner] Error:", error);
-    return new Response(
-      JSON.stringify({
-        error: "Job failed",
-        message: error instanceof Error ? error.message : "Unknown error",
-      }),
-      { status: 500, headers: { "Content-Type": "application/json" } }
+    return createApiErrorResponse(
+      "INTERNAL_ERROR",
+      "Job failed",
+      { originalError: getErrorMessage(error) }
     );
   }
 }
@@ -134,17 +136,26 @@ export async function POST(req: NextRequest) {
  * GET handler - health check / status
  */
 export async function GET(_req: NextRequest) {
-  // Allow unauthenticated health checks
-  return new Response(
-    JSON.stringify({
-      status: "ok",
-      job: "theme-scanner",
-      description: "Scans content to extract and link themes",
-      endpoints: {
-        "POST /scan": "Trigger theme extraction scan",
-        "POST /list_themes": "List themes with evidence",
-      },
-    }),
-    { status: 200, headers: { "Content-Type": "application/json" } }
-  );
+  try {
+    // Allow unauthenticated health checks
+    return new Response(
+      JSON.stringify({
+        status: "ok",
+        job: "theme-scanner",
+        description: "Scans content to extract and link themes",
+        endpoints: {
+          "POST /scan": "Trigger theme extraction scan",
+          "POST /list_themes": "List themes with evidence",
+        },
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } }
+    );
+  } catch (error) {
+    console.error("[theme-scanner] GET error:", error);
+    return createApiErrorResponse(
+      "INTERNAL_ERROR",
+      "Failed to get service status",
+      { originalError: getErrorMessage(error) }
+    );
+  }
 }

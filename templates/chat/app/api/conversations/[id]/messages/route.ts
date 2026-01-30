@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase/client";
+import { createApiError, getErrorMessage } from "@/lib/api/errors";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -8,20 +9,33 @@ type RouteParams = { params: Promise<{ id: string }> };
  * List all messages for a conversation
  */
 export async function GET(req: NextRequest, { params }: RouteParams) {
-  const { id } = await params;
-  const supabase = createServerClient();
+  try {
+    const { id } = await params;
+    const supabase = createServerClient();
 
-  const { data, error } = await supabase
-    .from("messages")
-    .select("*")
-    .eq("conversation_id", id)
-    .order("created_at", { ascending: true });
+    const { data, error } = await supabase
+      .from("messages")
+      .select("*")
+      .eq("conversation_id", id)
+      .order("created_at", { ascending: true });
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error) {
+      return createApiError(
+        "INTERNAL_ERROR",
+        "Failed to fetch messages",
+        { dbError: error.message, conversationId: id }
+      );
+    }
+
+    return NextResponse.json({ messages: data });
+  } catch (error) {
+    console.error("[messages] GET error:", error);
+    return createApiError(
+      "INTERNAL_ERROR",
+      "An unexpected error occurred while fetching messages",
+      { originalError: getErrorMessage(error) }
+    );
   }
-
-  return NextResponse.json({ messages: data });
 }
 
 /**
@@ -30,40 +44,61 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
  * Body: { role: "user" | "assistant", content: string, next_actions?: string[], assumptions?: string[] }
  */
 export async function POST(req: NextRequest, { params }: RouteParams) {
-  const { id } = await params;
-  const supabase = createServerClient();
-
-  let body: {
-    role: "user" | "assistant";
-    content: string;
-    next_actions?: string[];
-    assumptions?: string[];
-  };
   try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    const { id } = await params;
+    const supabase = createServerClient();
+
+    let body: {
+      role: "user" | "assistant";
+      content: string;
+      next_actions?: string[];
+      assumptions?: string[];
+    };
+    try {
+      body = await req.json();
+    } catch {
+      return createApiError(
+        "BAD_REQUEST",
+        "Invalid JSON body",
+        { expected: "{ role, content, next_actions?, assumptions? }" }
+      );
+    }
+
+    if (!body.role || !body.content) {
+      return createApiError(
+        "VALIDATION_ERROR",
+        "role and content are required",
+        { missing: [!body.role && "role", !body.content && "content"].filter(Boolean) }
+      );
+    }
+
+    const { data, error } = await supabase
+      .from("messages")
+      .insert({
+        conversation_id: id,
+        role: body.role,
+        content: body.content,
+        next_actions: body.next_actions ?? null,
+        assumptions: body.assumptions ?? null,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      return createApiError(
+        "INTERNAL_ERROR",
+        "Failed to create message",
+        { dbError: error.message, conversationId: id }
+      );
+    }
+
+    return NextResponse.json({ message: data }, { status: 201 });
+  } catch (error) {
+    console.error("[messages] POST error:", error);
+    return createApiError(
+      "INTERNAL_ERROR",
+      "An unexpected error occurred while creating message",
+      { originalError: getErrorMessage(error) }
+    );
   }
-
-  if (!body.role || !body.content) {
-    return NextResponse.json({ error: "role and content are required" }, { status: 400 });
-  }
-
-  const { data, error } = await supabase
-    .from("messages")
-    .insert({
-      conversation_id: id,
-      role: body.role,
-      content: body.content,
-      next_actions: body.next_actions ?? null,
-      assumptions: body.assumptions ?? null,
-    })
-    .select()
-    .single();
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-
-  return NextResponse.json({ message: data }, { status: 201 });
 }

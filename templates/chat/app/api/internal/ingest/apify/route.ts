@@ -11,6 +11,7 @@
 
 import type { NextRequest } from "next/server";
 import { ingestDocument, type SourceType } from "@/lib/rag/ingest";
+import { createApiErrorResponse, getErrorMessage } from "@/lib/api/errors";
 
 // Force Node.js runtime (crypto module required for content hashing)
 export const runtime = "nodejs";
@@ -113,176 +114,194 @@ const MAX_DOCUMENTS_PER_REQUEST = 50;
 const MAX_CONTENT_LENGTH = 100_000; // 100K chars per document
 
 export async function POST(req: NextRequest) {
-  // Verify internal secret
-  if (!verifySecret(req)) {
-    return new Response(JSON.stringify({ error: "Unauthorized" }), {
-      status: 401,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
-
-  let body: ApifyIngestPayload;
-
   try {
-    body = await req.json();
-  } catch {
-    return new Response(JSON.stringify({ error: "Invalid JSON body" }), {
-      status: 400,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
-
-  // Validate required fields
-  if (!body.actor_id) {
-    return new Response(
-      JSON.stringify({ error: "actor_id is required" }),
-      { status: 400, headers: { "Content-Type": "application/json" } }
-    );
-  }
-
-  // Verify actor is in allowlist
-  if (!ALLOWED_ACTOR_IDS.has(body.actor_id)) {
-    return new Response(
-      JSON.stringify({
-        error: "Actor not allowed",
-        message: `Actor "${body.actor_id}" is not in the allowlist. Contact admin to add it.`,
-        allowed_actors: Array.from(ALLOWED_ACTOR_IDS),
-      }),
-      { status: 403, headers: { "Content-Type": "application/json" } }
-    );
-  }
-
-  if (!body.documents || !Array.isArray(body.documents)) {
-    return new Response(
-      JSON.stringify({ error: "documents array is required" }),
-      { status: 400, headers: { "Content-Type": "application/json" } }
-    );
-  }
-
-  if (body.documents.length > MAX_DOCUMENTS_PER_REQUEST) {
-    return new Response(
-      JSON.stringify({
-        error: `Maximum ${MAX_DOCUMENTS_PER_REQUEST} documents per request`,
-      }),
-      { status: 400, headers: { "Content-Type": "application/json" } }
-    );
-  }
-
-  const orgId = body.org_id || DEFAULT_ORG_ID;
-  const sourceType: SourceType = body.source_type || "apify";
-  const tags = body.tags || [];
-
-  const results: Array<{
-    url: string;
-    doc_id?: string;
-    status: "ingested" | "skipped";
-    reason?: string;
-  }> = [];
-
-  let documentsProcessed = 0;
-  let documentsSkipped = 0;
-  let chunksCreated = 0;
-
-  for (const doc of body.documents) {
-    // Validate document
-    if (!doc.url || !isValidUrl(doc.url)) {
-      results.push({
-        url: doc.url || "unknown",
-        status: "skipped",
-        reason: "Invalid URL",
-      });
-      documentsSkipped++;
-      continue;
+    // Verify internal secret
+    if (!verifySecret(req)) {
+      return createApiErrorResponse(
+        "UNAUTHORIZED",
+        "Invalid or missing X-Internal-Secret header",
+        { header: "X-Internal-Secret" }
+      );
     }
 
-    if (!doc.markdown || doc.markdown.trim().length < 50) {
-      results.push({
-        url: doc.url,
-        status: "skipped",
-        reason: "Content too short or empty",
-      });
-      documentsSkipped++;
-      continue;
-    }
-
-    // Truncate overly long content
-    let content = doc.markdown;
-    if (content.length > MAX_CONTENT_LENGTH) {
-      content = content.slice(0, MAX_CONTENT_LENGTH) + "\n\n[Content truncated]";
-    }
+    let body: ApifyIngestPayload;
 
     try {
-      const result = await ingestDocument({
-        org_id: orgId,
-        source_type: sourceType,
-        source_id: getHostname(doc.url),
-        title: doc.title || doc.url,
-        content_md: content,
-        metadata: {
-          url: doc.url,
-          apify: {
-            actor_id: body.actor_id,
-            run_id: body.run_id,
-          },
-          tags,
-          ...(doc.metadata || {}),
-        },
-      });
+      body = await req.json();
+    } catch {
+      return createApiErrorResponse(
+        "BAD_REQUEST",
+        "Invalid JSON body",
+        { expected: "{ actor_id, documents, ... }" }
+      );
+    }
 
-      if (result.status === "unchanged") {
+    // Validate required fields
+    if (!body.actor_id) {
+      return createApiErrorResponse(
+        "VALIDATION_ERROR",
+        "actor_id is required",
+        { field: "actor_id" }
+      );
+    }
+
+    // Verify actor is in allowlist
+    if (!ALLOWED_ACTOR_IDS.has(body.actor_id)) {
+      return createApiErrorResponse(
+        "FORBIDDEN",
+        `Actor "${body.actor_id}" is not in the allowlist. Contact admin to add it.`,
+        { actor_id: body.actor_id, allowed_actors: Array.from(ALLOWED_ACTOR_IDS) }
+      );
+    }
+
+    if (!body.documents || !Array.isArray(body.documents)) {
+      return createApiErrorResponse(
+        "VALIDATION_ERROR",
+        "documents array is required",
+        { field: "documents" }
+      );
+    }
+
+    if (body.documents.length > MAX_DOCUMENTS_PER_REQUEST) {
+      return createApiErrorResponse(
+        "VALIDATION_ERROR",
+        `Maximum ${MAX_DOCUMENTS_PER_REQUEST} documents per request`,
+        { field: "documents", max: MAX_DOCUMENTS_PER_REQUEST, received: body.documents.length }
+      );
+    }
+
+    const orgId = body.org_id || DEFAULT_ORG_ID;
+    const sourceType: SourceType = body.source_type || "apify";
+    const tags = body.tags || [];
+
+    const results: Array<{
+      url: string;
+      doc_id?: string;
+      status: "ingested" | "skipped";
+      reason?: string;
+    }> = [];
+
+    let documentsProcessed = 0;
+    let documentsSkipped = 0;
+    let chunksCreated = 0;
+
+    for (const doc of body.documents) {
+      // Validate document
+      if (!doc.url || !isValidUrl(doc.url)) {
         results.push({
-          url: doc.url,
-          doc_id: result.doc_id,
+          url: doc.url || "unknown",
           status: "skipped",
-          reason: "Content unchanged",
+          reason: "Invalid URL",
         });
         documentsSkipped++;
-      } else {
+        continue;
+      }
+
+      if (!doc.markdown || doc.markdown.trim().length < 50) {
         results.push({
           url: doc.url,
-          doc_id: result.doc_id,
-          status: "ingested",
+          status: "skipped",
+          reason: "Content too short or empty",
         });
-        documentsProcessed++;
-        chunksCreated += result.chunk_count;
+        documentsSkipped++;
+        continue;
       }
-    } catch (error) {
-      results.push({
-        url: doc.url,
-        status: "skipped",
-        reason: error instanceof Error ? error.message : "Ingestion failed",
-      });
-      documentsSkipped++;
-    }
-  }
 
-  return new Response(
-    JSON.stringify({
-      ok: true,
-      actor_id: body.actor_id,
-      run_id: body.run_id,
-      documents_processed: documentsProcessed,
-      documents_skipped: documentsSkipped,
-      chunks_created: chunksCreated,
-      results,
-    }),
-    { status: 200, headers: { "Content-Type": "application/json" } }
-  );
+      // Truncate overly long content
+      let content = doc.markdown;
+      if (content.length > MAX_CONTENT_LENGTH) {
+        content = content.slice(0, MAX_CONTENT_LENGTH) + "\n\n[Content truncated]";
+      }
+
+      try {
+        const result = await ingestDocument({
+          org_id: orgId,
+          source_type: sourceType,
+          source_id: getHostname(doc.url),
+          title: doc.title || doc.url,
+          content_md: content,
+          metadata: {
+            url: doc.url,
+            apify: {
+              actor_id: body.actor_id,
+              run_id: body.run_id,
+            },
+            tags,
+            ...(doc.metadata || {}),
+          },
+        });
+
+        if (result.status === "unchanged") {
+          results.push({
+            url: doc.url,
+            doc_id: result.doc_id,
+            status: "skipped",
+            reason: "Content unchanged",
+          });
+          documentsSkipped++;
+        } else {
+          results.push({
+            url: doc.url,
+            doc_id: result.doc_id,
+            status: "ingested",
+          });
+          documentsProcessed++;
+          chunksCreated += result.chunk_count;
+        }
+      } catch (error) {
+        results.push({
+          url: doc.url,
+          status: "skipped",
+          reason: getErrorMessage(error),
+        });
+        documentsSkipped++;
+      }
+    }
+
+    return new Response(
+      JSON.stringify({
+        ok: true,
+        actor_id: body.actor_id,
+        run_id: body.run_id,
+        documents_processed: documentsProcessed,
+        documents_skipped: documentsSkipped,
+        chunks_created: chunksCreated,
+        results,
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } }
+    );
+  } catch (error) {
+    console.error("[apify/ingest] Error:", error);
+    return createApiErrorResponse(
+      "INTERNAL_ERROR",
+      "Ingestion failed",
+      { originalError: getErrorMessage(error) }
+    );
+  }
 }
 
 /**
  * GET - Health check / info
  */
 export async function GET() {
-  return new Response(
-    JSON.stringify({
-      service: "apify-ingest",
-      allowed_actors: Array.from(ALLOWED_ACTOR_IDS),
-      limits: {
-        MAX_DOCUMENTS_PER_REQUEST,
-        MAX_CONTENT_LENGTH,
-      },
-    }),
-    { status: 200, headers: { "Content-Type": "application/json" } }
-  );
+  try {
+    return new Response(
+      JSON.stringify({
+        service: "apify-ingest",
+        allowed_actors: Array.from(ALLOWED_ACTOR_IDS),
+        limits: {
+          MAX_DOCUMENTS_PER_REQUEST,
+          MAX_CONTENT_LENGTH,
+        },
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } }
+    );
+  } catch (error) {
+    console.error("[apify/ingest] GET error:", error);
+    return createApiErrorResponse(
+      "INTERNAL_ERROR",
+      "Failed to get service info",
+      { originalError: getErrorMessage(error) }
+    );
+  }
 }
