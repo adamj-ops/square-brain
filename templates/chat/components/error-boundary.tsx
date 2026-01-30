@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect } from "react";
+import React, { Component, ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { AlertTriangle, RefreshCw, Home } from "lucide-react";
+import { AlertTriangle, AlertCircle, RefreshCw, Home, ChevronDown, ChevronUp } from "lucide-react";
 
 interface ErrorBoundaryUIProps {
   error: Error & { digest?: string };
@@ -299,3 +300,220 @@ export function GlobalErrorUI({
     </html>
   );
 }
+
+/**
+ * Class-based Error Boundary Component
+ * 
+ * Wraps the app layout with branded error UI.
+ * Catches React errors and displays user-friendly recovery options.
+ */
+interface ErrorBoundaryProps {
+  children: ReactNode;
+  fallback?: ReactNode;
+}
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error: Error | null;
+  errorInfo: React.ErrorInfo | null;
+  showDetails: boolean;
+}
+
+export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.state = {
+      hasError: false,
+      error: null,
+      errorInfo: null,
+      showDetails: false,
+    };
+  }
+
+  static getDerivedStateFromError(error: Error): Partial<ErrorBoundaryState> {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo): void {
+    console.error("[ErrorBoundary] Caught error:", {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+      componentStack: errorInfo.componentStack,
+    });
+
+    this.setState({ errorInfo });
+    this.logErrorToServer(error, errorInfo);
+  }
+
+  private async logErrorToServer(error: Error, errorInfo: React.ErrorInfo): Promise<void> {
+    try {
+      const response = await fetch("/api/internal/log-error", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          error_type: "react_error_boundary",
+          error_name: error.name,
+          error_message: error.message,
+          error_stack: error.stack,
+          component_stack: errorInfo.componentStack,
+          url: typeof window !== "undefined" ? window.location.href : undefined,
+          timestamp: new Date().toISOString(),
+        }),
+      });
+
+      if (!response.ok) {
+        console.warn("[ErrorBoundary] Failed to log error to server:", response.status);
+      }
+    } catch (logErr) {
+      console.warn("[ErrorBoundary] Error logging failed:", logErr);
+    }
+  }
+
+  private handleReset = (): void => {
+    this.setState({
+      hasError: false,
+      error: null,
+      errorInfo: null,
+      showDetails: false,
+    });
+  };
+
+  private handleReload = (): void => {
+    if (typeof window !== "undefined") {
+      window.location.reload();
+    }
+  };
+
+  private handleGoHome = (): void => {
+    if (typeof window !== "undefined") {
+      window.location.href = "/";
+    }
+  };
+
+  private toggleDetails = (): void => {
+    this.setState((prev) => ({ showDetails: !prev.showDetails }));
+  };
+
+  render(): ReactNode {
+    if (this.state.hasError) {
+      if (this.props.fallback) {
+        return this.props.fallback;
+      }
+
+      const { error, errorInfo, showDetails } = this.state;
+
+      return (
+        <div className="min-h-screen bg-background flex items-center justify-center p-4">
+          <div className="max-w-md w-full space-y-6">
+            {/* Error Icon with LifeRX accent */}
+            <div className="flex justify-center">
+              <div className="w-16 h-16 rounded-full bg-gradient-to-br from-violet-500/10 via-indigo-500/10 to-blue-500/10 ring-1 ring-violet-500/20 flex items-center justify-center">
+                <AlertCircle className="w-8 h-8 text-violet-500" />
+              </div>
+            </div>
+
+            {/* Error Message */}
+            <div className="text-center space-y-2">
+              <h1 className="text-2xl font-semibold text-foreground">
+                Something went wrong
+              </h1>
+              <p className="text-muted-foreground">
+                We encountered an unexpected error. Don&apos;t worry, your data is safe.
+                Please try one of the options below.
+              </p>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex flex-col gap-3">
+              <Button
+                onClick={this.handleReset}
+                className="w-full gap-2 bg-gradient-to-r from-violet-500 via-indigo-500 to-blue-500 text-white hover:from-violet-600 hover:via-indigo-600 hover:to-blue-600"
+              >
+                <RefreshCw className="w-4 h-4" />
+                Try Again
+              </Button>
+
+              <Button
+                onClick={this.handleReload}
+                className="w-full"
+                variant="outline"
+              >
+                <RefreshCw className="w-4 h-4 mr-2" />
+                Reload Page
+              </Button>
+
+              <Button
+                onClick={this.handleGoHome}
+                className="w-full"
+                variant="ghost"
+              >
+                <Home className="w-4 h-4 mr-2" />
+                Go to Home
+              </Button>
+            </div>
+
+            {/* Error Details (collapsible) */}
+            {(error || errorInfo) && (
+              <div className="border border-border rounded-lg overflow-hidden">
+                <button
+                  onClick={this.toggleDetails}
+                  className="w-full px-4 py-3 flex items-center justify-between text-sm text-muted-foreground hover:bg-muted/50 transition-colors"
+                >
+                  <span>Technical Details</span>
+                  {showDetails ? (
+                    <ChevronUp className="w-4 h-4" />
+                  ) : (
+                    <ChevronDown className="w-4 h-4" />
+                  )}
+                </button>
+
+                {showDetails && (
+                  <div className="px-4 pb-4 space-y-2">
+                    {error && (
+                      <div className="text-xs">
+                        <p className="font-medium text-foreground">Error:</p>
+                        <p className="text-destructive font-mono break-all">
+                          {error.name}: {error.message}
+                        </p>
+                      </div>
+                    )}
+
+                    {error?.stack && (
+                      <div className="text-xs">
+                        <p className="font-medium text-foreground">Stack Trace:</p>
+                        <pre className="text-muted-foreground font-mono text-[10px] overflow-auto max-h-32 bg-muted p-2 rounded">
+                          {error.stack}
+                        </pre>
+                      </div>
+                    )}
+
+                    {errorInfo?.componentStack && (
+                      <div className="text-xs">
+                        <p className="font-medium text-foreground">Component Stack:</p>
+                        <pre className="text-muted-foreground font-mono text-[10px] overflow-auto max-h-32 bg-muted p-2 rounded">
+                          {errorInfo.componentStack}
+                        </pre>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* LifeRX Branding Footer */}
+            <div className="text-center text-xs text-muted-foreground">
+              <p>LifeRX Brain • Your prescription for happiness starts here</p>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
+export default ErrorBoundary;

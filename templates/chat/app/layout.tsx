@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
+import { ErrorBoundary } from "@/components/error-boundary";
 
 export const metadata: Metadata = {
   title: "LifeRX Brain",
@@ -19,7 +20,9 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className="antialiased">
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
-          {children}
+          <ErrorBoundary>
+            {children}
+          </ErrorBoundary>
         </ThemeProvider>
       </body>
     </html>
